@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2021-2022  Igara Studio S.A.
+// Copyright (C) 2021-2024  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This program is distributed under the terms of
@@ -13,33 +13,35 @@
 #include "ui/popup_window.h"
 
 namespace ui {
-  class Button;
-  class View;
-}
+class Button;
+class View;
+} // namespace ui
 
 namespace app {
 
-  namespace gen {
-    class PalettePopup;
-  }
+namespace gen {
+class PalettePopup;
+}
 
-  class PalettePopup : public ui::PopupWindow {
-  public:
-    PalettePopup();
+class PalettePopup : public ui::PopupWindow {
+public:
+  PalettePopup();
 
-    void showPopup(ui::Display* display,
-                   const gfx::Rect& buttonPos);
+  void showPopup(ui::Display* display, const gfx::Rect& buttonPos);
 
-  protected:
-    void onPalChange(const doc::Palette* palette);
-    void onSearchChange();
-    void onLoadPal();
-    void onOpenFolder();
+protected:
+  bool onProcessMessage(ui::Message* msg) override;
 
-  private:
-    gen::PalettePopup* m_popup;
-    PalettesListBox m_paletteListBox;
-  };
+  void onPalChange(const doc::Palette* palette);
+  void onSearchChange();
+  void onRefresh();
+  void onLoadPal();
+  void onOpenFolder();
+
+private:
+  gen::PalettePopup* m_popup;
+  PalettesListBox m_paletteListBox;
+};
 
 } // namespace app
 

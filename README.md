@@ -1,6 +1,7 @@
 # Aseprite
 
 [![build](https://github.com/aseprite/aseprite/actions/workflows/build.yml/badge.svg)](https://github.com/aseprite/aseprite/actions/workflows/build.yml)
+[![Translation Status](https://hosted.weblate.org/widget/aseprite/aseprite/svg-badge.svg)](https://hosted.weblate.org/engage/aseprite/)
 [![Discourse Community](https://img.shields.io/badge/discourse-community-brightgreen.svg?style=flat)](https://community.aseprite.org/)
 [![Discord Server](https://discordapp.com/api/guilds/324979738533822464/embed.png)](https://discord.gg/Yb2CeX8)
 
@@ -16,7 +17,7 @@
 * [Layer groups](https://imgur.com/x3OKkGj) for organizing your work, and [reference layers](https://twitter.com/aseprite/status/806889204601016325) for rotoscoping.
 * Pixel-art specific tools like [Pixel Perfect freehand mode](https://imgur.com/0fdlNau), [Shading ink](https://www.aseprite.org/docs/shading/), [Custom Brushes](https://twitter.com/aseprite/status/1196883990080344067), [Outlines](https://twitter.com/aseprite/status/1126548469865431041), [Wide Pixels](https://imgur.com/1yZKUcs), etc.
 * Other special drawing tools like [Pressure sensitivity](https://twitter.com/aseprite/status/1253770784708886533), [Symmetry Tool](https://twitter.com/aseprite/status/659709226747625472), [Stroke and Fill](https://imgur.com/7JZQ81o) selection, [Gradients](https://twitter.com/aseprite/status/1126549217856622597).
-* [Tiled mode](https://twitter.com/pixel__toast/status/1132079817736695808) useful to draw patterns and textures.
+* [Tiled mode](https://youtu.be/G_JeWBaxQIg) useful to draw patterns and textures.
 * [Transform multiple frames/layers](https://twitter.com/aseprite/status/1170007034651172866) at the same time.
 * [Lua scripting capabilities](https://www.aseprite.org/docs/scripting/).
 * [CLI - Command Line Interface](https://www.aseprite.org/docs/cli/) to automatize tasks.
@@ -85,7 +86,7 @@ It tries to replicate some pixel-art algorithms:
 Thanks to [third-party open source projects](docs/LICENSES.md), to
 [contributors](https://www.aseprite.org/contributors/), and all the
 people who have contributed ideas, patches, bugs report, feature
-requests, donations, and help me to develop Aseprite.
+requests, donations, and help us to develop Aseprite.
 
 ## License
 

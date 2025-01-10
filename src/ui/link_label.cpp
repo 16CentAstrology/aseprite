@@ -1,13 +1,12 @@
 // Aseprite UI Library
-// Copyright (C) 2018  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
-
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "ui/link_label.h"
@@ -19,18 +18,14 @@
 
 namespace ui {
 
-LinkLabel::LinkLabel(const std::string& urlOrText)
-  : Label(urlOrText)
-  , m_url(urlOrText)
+LinkLabel::LinkLabel(const std::string& urlOrText) : Label(urlOrText), m_url(urlOrText)
 {
   disableFlags(IGNORE_MOUSE);
   setType(kLinkLabelWidget);
   initTheme();
 }
 
-LinkLabel::LinkLabel(const std::string& url, const std::string& text)
-  : Label(text)
-  , m_url(url)
+LinkLabel::LinkLabel(const std::string& url, const std::string& text) : Label(text), m_url(url)
 {
   disableFlags(IGNORE_MOUSE);
   setType(kLinkLabelWidget);
@@ -45,10 +40,9 @@ void LinkLabel::setUrl(const std::string& url)
 bool LinkLabel::onProcessMessage(Message* msg)
 {
   switch (msg->type()) {
-
     case kSetCursorMessage:
       // TODO theme stuff
-      if (isEnabled() && hasMouseOver()) {
+      if (isEnabled() && hasMouse()) {
         set_mouse_cursor(kHandCursor);
         return true;
       }
@@ -60,13 +54,13 @@ bool LinkLabel::onProcessMessage(Message* msg)
         if (hasCapture())
           setSelected(msg->type() == kMouseEnterMessage);
 
-        invalidate();           // TODO theme specific
+        invalidate(); // TODO theme specific
       }
       break;
 
     case kMouseMoveMessage:
       if (isEnabled() && hasCapture())
-        setSelected(hasMouseOver());
+        setSelected(hasMouse());
       break;
 
     case kMouseDownMessage:
@@ -81,9 +75,9 @@ bool LinkLabel::onProcessMessage(Message* msg)
         releaseMouse();
 
         setSelected(false);
-        invalidate();           // TODO theme specific
+        invalidate(); // TODO theme specific
 
-        if (hasMouseOver())
+        if (hasMouse())
           onClick();
       }
       break;

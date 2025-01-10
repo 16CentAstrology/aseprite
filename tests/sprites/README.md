@@ -25,3 +25,14 @@
   merged in the same texture atlas.
 * `2f-index-3x3.aseprite`: Indexed, 2 frames, 1 layer, mask color set
   to index 21.
+* `4f-index-4x4.aseprite`: Indexed, 4 frames, 1 layer, mask color set
+  to index 0.
+* `file-tests-props.aseprite`: Indexed, 64x64, 6 frames, 4 layers (one
+   of them is a tilemap), 13 cels, 1 tag, pre-defined user data
+   properties of all kinds in several sprite elements.
+* `slices.aseprite`: Indexed, 4x4, background layer, 2 slices.
+* `slices-moving.aseprite`: Indexed, 4x4, 1 linked cel in 4 frames,
+  background layer, 1 slice with 4 keyframes (each keyframe with a
+  different position/size).
+* `2x2tilemap2x2tile.aseprite`: RGB, 6x6, 2x2 tilemap layer, 5 tiles tileset,
+  2x2 tile size, 1 frame.

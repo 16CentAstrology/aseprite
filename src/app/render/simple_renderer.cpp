@@ -1,16 +1,26 @@
 // Aseprite
-// Copyright (C) 2022  Igara Studio S.A.
+// Copyright (C) 2022-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/render/simple_renderer.h"
 
+#include "app/ui/editor/editor_render.h"
+#include "app/util/conversion_to_surface.h"
+
 namespace app {
+
+using namespace doc;
+
+SimpleRenderer::SimpleRenderer()
+{
+  m_properties.outputsUnpremultiplied = true;
+}
 
 void SimpleRenderer::setRefLayersVisiblity(const bool visible)
 {
@@ -49,8 +59,7 @@ void SimpleRenderer::setPreviewImage(const doc::Layer* layer,
                                      const gfx::Point& pos,
                                      const doc::BlendMode blendMode)
 {
-  m_render.setPreviewImage(layer, frame, image, tileset,
-                           pos, blendMode);
+  m_render.setPreviewImage(layer, frame, image, tileset, pos, blendMode);
 }
 
 void SimpleRenderer::removePreviewImage()
@@ -65,8 +74,7 @@ void SimpleRenderer::setExtraImage(render::ExtraType type,
                                    const doc::Layer* currentLayer,
                                    const doc::frame_t currentFrame)
 {
-  m_render.setExtraImage(type, cel, image, blendMode,
-                         currentLayer, currentFrame);
+  m_render.setExtraImage(type, cel, image, blendMode, currentLayer, currentFrame);
 }
 
 void SimpleRenderer::removeExtraImage()
@@ -84,25 +92,44 @@ void SimpleRenderer::disableOnionskin()
   m_render.disableOnionskin();
 }
 
-void SimpleRenderer::renderSprite(doc::Image* dstImage,
-                                  const doc::Sprite* sprite,
-                                  const doc::frame_t frame)
-{
-  m_render.renderSprite(dstImage, sprite, frame);
-}
-
-void SimpleRenderer::renderSprite(doc::Image* dstImage,
+void SimpleRenderer::renderSprite(os::Surface* dstSurface,
                                   const doc::Sprite* sprite,
                                   const doc::frame_t frame,
                                   const gfx::ClipF& area)
 {
-  m_render.renderSprite(dstImage, sprite, frame, area);
+  ImageRef dstImage(
+    Image::create(IMAGE_RGB, area.size.w, area.size.h, EditorRender::getRenderImageBuffer()));
+  m_render.renderSprite(dstImage.get(), sprite, frame, area);
+
+  convert_image_to_surface(dstImage.get(),
+                           sprite->palette(frame),
+                           dstSurface,
+                           0,
+                           0,
+                           0,
+                           0,
+                           area.size.w,
+                           area.size.h);
 }
 
-void SimpleRenderer::renderCheckeredBackground(doc::Image* dstImage,
+void SimpleRenderer::renderCheckeredBackground(os::Surface* dstSurface,
+                                               const doc::Sprite* sprite,
                                                const gfx::Clip& area)
 {
-  m_render.renderCheckeredBackground(dstImage, area);
+  ImageRef dstImage(
+    Image::create(IMAGE_RGB, area.size.w, area.size.h, EditorRender::getRenderImageBuffer()));
+
+  m_render.renderCheckeredBackground(dstImage.get(), area);
+
+  convert_image_to_surface(dstImage.get(),
+                           sprite->palette(0),
+                           dstSurface,
+                           0,
+                           0,
+                           0,
+                           0,
+                           area.size.w,
+                           area.size.h);
 }
 
 void SimpleRenderer::renderImage(doc::Image* dstImage,
@@ -113,8 +140,7 @@ void SimpleRenderer::renderImage(doc::Image* dstImage,
                                  const int opacity,
                                  const doc::BlendMode blendMode)
 {
-  m_render.renderImage(dstImage, srcImage, pal,
-                       x, y, opacity, blendMode);
+  m_render.renderImage(dstImage, srcImage, pal, x, y, opacity, blendMode);
 }
 
 } // namespace app

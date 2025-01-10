@@ -1,11 +1,11 @@
 // Aseprite
-// Copyright (C) 2020-2022  Igara Studio S.A.
+// Copyright (C) 2020-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
@@ -17,22 +17,18 @@
 #include "app/script/luacpp.h"
 #include "app/ui/app_menuitem.h"
 
-namespace app {
-namespace script {
+namespace app { namespace script {
 
 namespace {
 
 struct Plugin {
   Extension* ext;
-  Plugin(Extension* ext) : ext(ext) { }
+  Plugin(Extension* ext) : ext(ext) {}
 };
 
 class PluginCommand : public Command {
 public:
-  PluginCommand(const std::string& id,
-                const std::string& title,
-                int onclickRef,
-                int onenabledRef)
+  PluginCommand(const std::string& id, const std::string& title, int onclickRef, int onenabledRef)
     : Command(id.c_str(), CmdUIOnlyFlag)
     , m_title(title)
     , m_onclickRef(onclickRef)
@@ -40,7 +36,8 @@ public:
   {
   }
 
-  ~PluginCommand() {
+  ~PluginCommand()
+  {
     auto app = App::instance();
     ASSERT(app);
     if (!app)
@@ -53,11 +50,10 @@ public:
   }
 
 protected:
-  std::string onGetFriendlyName() const override {
-    return m_title;
-  }
+  std::string onGetFriendlyName() const override { return m_title; }
 
-  void onExecute(Context* context) override {
+  void onExecute(Context* context) override
+  {
     script::Engine* engine = App::instance()->scriptEngine();
     lua_State* L = engine->luaState();
 
@@ -72,7 +68,8 @@ protected:
     }
   }
 
-  bool onEnabled(Context* context) override {
+  bool onEnabled(Context* context) override
+  {
     if (m_onenabledRef) {
       script::Engine* engine = App::instance()->scriptEngine();
       lua_State* L = engine->luaState();
@@ -106,6 +103,14 @@ void deleteCommandIfExistent(Extension* ext, const std::string& id)
     ext->removeCommand(id);
     delete cmd;
   }
+}
+
+void deleteMenuGroupIfExistent(Extension* ext, const std::string& id)
+{
+  if (auto* appMenus = AppMenus::instance())
+    appMenus->removeMenuGroup(id);
+
+  ext->removeMenuGroup(id);
 }
 
 int Plugin_gc(lua_State* L)
@@ -162,16 +167,13 @@ int Plugin_newCommand(lua_State* L)
       Commands::instance()->add(cmd);
       plugin->ext->addCommand(id);
 
-#ifdef ENABLE_UI
       // Add a new menu option if the "group" is defined
-      if (!group.empty() &&
-          App::instance()->isGui()) { // On CLI menus do not make sense
+      if (!group.empty() && App::instance()->isGui()) { // On CLI menus do not make sense
         if (auto appMenus = AppMenus::instance()) {
-          std::unique_ptr<MenuItem> menuItem(new AppMenuItem(title, id));
+          auto menuItem = std::make_unique<AppMenuItem>(title, id);
           appMenus->addMenuItemIntoGroup(group, std::move(menuItem));
         }
       }
-#endif // ENABLE_UI
     }
     else {
       lua_pop(L, 1);
@@ -204,6 +206,113 @@ int Plugin_deleteCommand(lua_State* L)
   return 0;
 }
 
+int Plugin_newMenuGroup(lua_State* L)
+{
+  auto plugin = get_obj<Plugin>(L, 1);
+  if (lua_istable(L, 2)) {
+    std::string id, title, group;
+
+    lua_getfield(L, 2, "id"); // This new group ID
+    if (const char* s = lua_tostring(L, -1)) {
+      id = s;
+    }
+    lua_pop(L, 1);
+
+    if (id.empty())
+      return luaL_error(L, "Empty id field in plugin:newMenuGroup{ id=... }");
+
+    lua_getfield(L, 2, "title");
+    if (const char* s = lua_tostring(L, -1)) {
+      title = s;
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, 2, "group"); // Parent group
+    if (const char* s = lua_tostring(L, -1)) {
+      group = s;
+    }
+    lua_pop(L, 1);
+
+    // Delete the group if it already exist (e.g. we are overwriting a
+    // previous registered group)
+    deleteMenuGroupIfExistent(plugin->ext, id);
+
+    plugin->ext->addMenuGroup(id);
+
+    // Add a new menu option if the "group" is defined
+    if (!group.empty() && App::instance()->isGui()) { // On CLI menus do not make sense
+      if (auto appMenus = AppMenus::instance()) {
+        auto menuItem = std::make_unique<AppMenuItem>(title, id);
+        menuItem->setSubmenu(new Menu);
+        appMenus->addMenuGroup(id, menuItem.get());
+        appMenus->addMenuItemIntoGroup(group, std::move(menuItem));
+      }
+    }
+  }
+  return 0;
+}
+
+int Plugin_deleteMenuGroup(lua_State* L)
+{
+  std::string id;
+
+  auto plugin = get_obj<Plugin>(L, 1);
+  if (lua_istable(L, 2)) {
+    lua_getfield(L, 2, "id");
+    if (const char* s = lua_tostring(L, -1)) {
+      id = s;
+    }
+    lua_pop(L, 1);
+  }
+  else if (const char* s = lua_tostring(L, 2)) {
+    id = s;
+  }
+
+  if (id.empty())
+    return luaL_error(L, "No menu group id specified in plugin:deleteMenuGroup()");
+
+  deleteMenuGroupIfExistent(plugin->ext, id);
+  return 0;
+}
+
+int Plugin_newMenuSeparator(lua_State* L)
+{
+  auto* plugin = get_obj<Plugin>(L, 1);
+  if (lua_istable(L, 2)) {
+    std::string group;
+
+    lua_getfield(L, 2, "group"); // Parent group
+    if (const char* s = lua_tostring(L, -1)) {
+      group = s;
+    }
+    lua_pop(L, 1);
+
+    // Add a new separator if the "group" is defined
+    if (!group.empty() && App::instance()->isGui()) { // On CLI menus do not make sense
+      if (auto appMenus = AppMenus::instance()) {
+        auto menuItem = std::make_unique<ui::MenuSeparator>();
+        plugin->ext->addMenuSeparator(menuItem.get());
+        appMenus->addMenuItemIntoGroup(group, std::move(menuItem));
+      }
+    }
+  }
+  return 0;
+}
+
+int Plugin_get_name(lua_State* L)
+{
+  auto plugin = get_obj<Plugin>(L, 1);
+  lua_pushstring(L, plugin->ext->name().c_str());
+  return 1;
+}
+
+int Plugin_get_path(lua_State* L)
+{
+  auto plugin = get_obj<Plugin>(L, 1);
+  lua_pushstring(L, plugin->ext->path().c_str());
+  return 1;
+}
+
 int Plugin_get_preferences(lua_State* L)
 {
   if (!lua_getuservalue(L, 1)) {
@@ -222,15 +331,20 @@ int Plugin_set_preferences(lua_State* L)
 }
 
 const luaL_Reg Plugin_methods[] = {
-  { "__gc", Plugin_gc },
-  { "newCommand", Plugin_newCommand },
-  { "deleteCommand", Plugin_deleteCommand },
-  { nullptr, nullptr }
+  { "__gc",             Plugin_gc               },
+  { "newCommand",       Plugin_newCommand       },
+  { "deleteCommand",    Plugin_deleteCommand    },
+  { "newMenuGroup",     Plugin_newMenuGroup     },
+  { "deleteMenuGroup",  Plugin_deleteMenuGroup  },
+  { "newMenuSeparator", Plugin_newMenuSeparator },
+  { nullptr,            nullptr                 }
 };
 
 const Property Plugin_properties[] = {
+  { "name",        Plugin_get_name,        nullptr                },
+  { "path",        Plugin_get_path,        nullptr                },
   { "preferences", Plugin_get_preferences, Plugin_set_preferences },
-  { nullptr, nullptr, nullptr }
+  { nullptr,       nullptr,                nullptr                }
 };
 
 } // anonymous namespace
@@ -248,5 +362,4 @@ void push_plugin(lua_State* L, Extension* ext)
   push_new<Plugin>(L, ext);
 }
 
-} // namespace script
-} // namespace app
+}} // namespace app::script

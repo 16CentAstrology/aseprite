@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2019-2021  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/util/cel_ops.h"
@@ -23,6 +23,7 @@
 #include "app/cmd_sequence.h"
 #include "app/doc.h"
 #include "doc/algorithm/fill_selection.h"
+#include "doc/algorithm/flip_image.h"
 #include "doc/algorithm/resize_image.h"
 #include "doc/algorithm/shrink_bounds.h"
 #include "doc/cel.h"
@@ -62,9 +63,9 @@ void mask_image_templ(Image* image, const Image* bitmap)
   const LockImageBits<BitmapTraits> bits2(bitmap);
   typename LockImageBits<ImageTraits>::iterator it1, end1;
   LockImageBits<BitmapTraits>::const_iterator it2, end2;
-  for (it1 = bits1.begin(), end1 = bits1.end(),
-       it2 = bits2.begin(), end2 = bits2.end();
-       it1 != end1 && it2 != end2; ++it1, ++it2) {
+  for (it1 = bits1.begin(), end1 = bits1.end(), it2 = bits2.begin(), end2 = bits2.end();
+       it1 != end1 && it2 != end2;
+       ++it1, ++it2) {
     if (!*it2)
       *it1 = image->maskColor();
   }
@@ -88,10 +89,9 @@ void create_region_with_differences_templ(const Image* a,
                                           const gfx::Rect& bounds,
                                           gfx::Region& output)
 {
-  for (int y=bounds.y; y<bounds.y2(); ++y) {
-    for (int x=bounds.x; x<bounds.x2(); ++x) {
-      if (get_pixel_fast<ImageTraits>(a, x, y) !=
-          get_pixel_fast<ImageTraits>(b, x, y)) {
+  for (int y = bounds.y; y < bounds.y2(); ++y) {
+    for (int x = bounds.x; x < bounds.x2(); ++x) {
+      if (get_pixel_fast<ImageTraits>(a, x, y) != get_pixel_fast<ImageTraits>(b, x, y)) {
         output.createUnion(output, gfx::Region(gfx::Rect(x, y, 1, 1)));
       }
     }
@@ -119,6 +119,133 @@ struct Mod {
   gfx::Region tileRgn;
 };
 
+class DoFlip {
+public:
+  DoFlip(const doc::ImageRef& image, const doc::algorithm::FlipType flipType)
+    : m_image(image.get())
+    , m_flipType(flipType)
+  {
+  }
+  ~DoFlip() { reset(); }
+  void flip()
+  {
+    m_flipped = !m_flipped;
+    doc::algorithm::flip_image(m_image, m_image->bounds(), m_flipType);
+  }
+  void reset()
+  {
+    if (m_flipped)
+      flip();
+  }
+  bool operator!() const { return !m_flipped; }
+
+private:
+  doc::Image* m_image;
+  bool m_flipped = false;
+  doc::algorithm::FlipType m_flipType;
+};
+
+// This is a terrible way to find tiles, i.e. flipping several times
+// the image, instead of searching for flipped hashes. In the future
+// we could try to improve it.
+bool find_tile(doc::Tileset* tileset,
+               doc::ImageRef& tileImage,
+               doc::tile_index& tileIndex,
+               doc::tile_flags& tileFlags)
+{
+  // Find without flags
+  if (tileset->findTileIndex(tileImage, tileIndex)) {
+    tileFlags = 0;
+    return true;
+  }
+
+  if (tileset->matchFlags() == 0) // In case we don't allow flipped tiles
+    return false;
+
+  DoFlip x(tileImage, doc::algorithm::FlipHorizontal);
+
+  // Find with X flip
+  if (tileset->matchFlags() & doc::tile_f_xflip) {
+    x.flip();
+    if (tileset->findTileIndex(tileImage, tileIndex)) {
+      tileFlags = doc::tile_f_xflip;
+      return true;
+    }
+    x.reset();
+  }
+
+  // Find with Y flip
+  DoFlip y(tileImage, doc::algorithm::FlipVertical);
+  if (tileset->matchFlags() & doc::tile_f_yflip) {
+    y.flip();
+    if (tileset->findTileIndex(tileImage, tileIndex)) {
+      tileFlags = doc::tile_f_yflip;
+      return true;
+    }
+
+    if (tileset->matchFlags() & doc::tile_f_xflip) {
+      // Find with X+Y flip
+      x.flip();
+      if (tileset->findTileIndex(tileImage, tileIndex)) {
+        tileFlags = doc::tile_f_xflip | doc::tile_f_yflip;
+        return true;
+      }
+      x.reset();
+    }
+    y.reset();
+  }
+
+  // Check if we can match diagonal flips
+  if ((tileset->matchFlags() & doc::tile_f_dflip) == 0)
+    return false;
+
+  // Find with D flip
+  DoFlip d(tileImage, doc::algorithm::FlipDiagonal);
+  d.flip();
+  if (tileset->findTileIndex(tileImage, tileIndex)) {
+    tileFlags = doc::tile_f_dflip;
+    return true;
+  }
+
+  // Find with X+D flip
+  if (tileset->matchFlags() & doc::tile_f_xflip) {
+    d.reset();
+    x.flip();
+    d.flip();
+    if (tileset->findTileIndex(tileImage, tileIndex)) {
+      tileFlags = doc::tile_f_xflip | doc::tile_f_dflip;
+      return true;
+    }
+
+    // Find with X+Y+D flip
+    if (tileset->matchFlags() & doc::tile_f_yflip) {
+      d.reset();
+      y.flip();
+      d.flip();
+      if (tileset->findTileIndex(tileImage, tileIndex)) {
+        tileFlags = doc::tile_f_xflip | doc::tile_f_yflip | doc::tile_f_dflip;
+        return true;
+      }
+    }
+  }
+
+  // Find with Y+D flip only
+  if (tileset->matchFlags() & doc::tile_f_yflip) {
+    d.reset();
+    x.reset();
+    if (!y)
+      y.flip();
+    d.flip();
+    if (tileset->findTileIndex(tileImage, tileIndex)) {
+      tileFlags = doc::tile_f_yflip | doc::tile_f_dflip;
+      return true;
+    }
+  }
+
+  // DoFlip destructors will reset the image.
+  return false;
+}
+
 } // anonymous namespace
 
 void create_region_with_differences(const Image* a,
@@ -129,45 +256,43 @@ void create_region_with_differences(const Image* a,
   ASSERT(a->pixelFormat() == b->pixelFormat());
   switch (a->pixelFormat()) {
     case IMAGE_RGB: create_region_with_differences_templ<RgbTraits>(a, b, bounds, output); break;
-    case IMAGE_GRAYSCALE: create_region_with_differences_templ<GrayscaleTraits>(a, b, bounds, output); break;
-    case IMAGE_INDEXED: create_region_with_differences_templ<IndexedTraits>(a, b, bounds, output); break;
+    case IMAGE_GRAYSCALE:
+      create_region_with_differences_templ<GrayscaleTraits>(a, b, bounds, output);
+      break;
+    case IMAGE_INDEXED:
+      create_region_with_differences_templ<IndexedTraits>(a, b, bounds, output);
+      break;
   }
 }
 
-static void remove_unused_tiles_from_tileset(
-  CmdSequence* cmds,
-  doc::Tileset* tileset,
-  std::vector<size_t>& tilesHistogram,
-  const std::vector<bool>& modifiedTileIndexes);
+static void remove_unused_tiles_from_tileset(CmdSequence* cmds,
+                                             doc::Tileset* tileset,
+                                             std::vector<size_t>& tilesHistogram,
+                                             const std::vector<bool>& modifiedTileIndexes);
 
-doc::ImageRef crop_cel_image(
-  const doc::Cel* cel,
-  const color_t bgcolor)
+doc::ImageRef crop_cel_image(const doc::Cel* cel, const color_t bgcolor)
 {
   doc::Sprite* sprite = cel->sprite();
 
   if (cel->layer()->isTilemap()) {
     doc::ImageRef dstImage(doc::Image::create(sprite->spec()));
 
-    render::Render().renderCel(
-      dstImage.get(),
-      cel,
-      sprite,
-      cel->image(),
-      cel->layer(),
-      sprite->palette(cel->frame()),
-      dstImage->bounds(),
-      gfx::Clip(cel->position(), dstImage->bounds()),
-      255, BlendMode::NORMAL);
+    render::Render().renderCel(dstImage.get(),
+                               cel,
+                               sprite,
+                               cel->image(),
+                               cel->layer(),
+                               sprite->palette(cel->frame()),
+                               dstImage->bounds(),
+                               gfx::Clip(cel->position(), dstImage->bounds()),
+                               255,
+                               BlendMode::NORMAL);
 
     return dstImage;
   }
   else {
     return doc::ImageRef(
-      doc::crop_image(
-        cel->image(),
-        gfx::Rect(sprite->bounds()).offset(-cel->position()),
-        bgcolor));
+      doc::crop_image(cel->image(), gfx::Rect(sprite->bounds()).offset(-cel->position()), bgcolor));
   }
 }
 
@@ -178,11 +303,9 @@ Cel* create_cel_copy(CmdSequence* cmds,
                      const frame_t dstFrame)
 {
   const Image* srcImage = srcCel->image();
-  doc::PixelFormat dstPixelFormat =
-    (dstLayer->isTilemap() ? IMAGE_TILEMAP:
-                             dstSprite->pixelFormat());
-  gfx::Size dstSize(srcImage->width(),
-                    srcImage->height());
+  doc::PixelFormat dstPixelFormat = (dstLayer->isTilemap() ? IMAGE_TILEMAP :
+                                                             dstSprite->pixelFormat());
+  gfx::Size dstSize(srcImage->width(), srcImage->height());
 
   // From Tilemap -> Image
   if (srcCel->layer()->isTilemap() && !dstLayer->isTilemap()) {
@@ -193,29 +316,22 @@ Cel* create_cel_copy(CmdSequence* cmds,
   else if (dstLayer->isTilemap()) {
     auto dstLayerTilemap = static_cast<doc::LayerTilemap*>(dstLayer);
 
+    Grid grid = dstLayerTilemap->tileset()->grid();
+
     // Tilemap -> Tilemap
-    Grid grid;
-    if (srcCel->layer()->isTilemap()) {
-      grid = dstLayerTilemap->tileset()->grid();
-      if (srcCel->layer()->isTilemap())
-        grid.origin(srcCel->position());
-    }
-    // Image -> Tilemap
-    else {
-      auto gridBounds = dstLayerTilemap->sprite()->gridBounds();
-      grid.origin(gridBounds.origin());
-      grid.tileSize(gridBounds.size());
-    }
+    if (srcCel->layer()->isTilemap())
+      grid.origin(srcCel->position());
 
     const gfx::Rect tilemapBounds = grid.canvasToTile(srcCel->bounds());
     dstSize = tilemapBounds.size();
   }
 
   // New cel
-  std::unique_ptr<Cel> dstCel(
-    new Cel(dstFrame, ImageRef(Image::create(dstPixelFormat, dstSize.w, dstSize.h))));
+  auto dstCel =
+    std::make_unique<Cel>(dstFrame, ImageRef(Image::create(dstPixelFormat, dstSize.w, dstSize.h)));
 
   dstCel->setOpacity(srcCel->opacity());
+  dstCel->copyNonsharedPropertiesFrom(srcCel);
   dstCel->data()->setUserData(srcCel->data()->userData());
 
   // Special case were we copy from a tilemap...
@@ -232,41 +348,42 @@ Cel* create_cel_copy(CmdSequence* cmds,
         doc::ImageSpec spec = dstSprite->spec();
         spec.setSize(srcCel->bounds().size());
         doc::ImageRef tmpImage(doc::Image::create(spec));
-        render::Render().renderCel(
-          tmpImage.get(),
-          srcCel,
-          dstSprite,
-          srcImage,
-          srcCel->layer(),
-          dstSprite->palette(dstCel->frame()),
-          gfx::Rect(gfx::Point(0, 0), srcCel->bounds().size()),
-          gfx::Clip(0, 0, tmpImage->bounds()),
-          255, BlendMode::NORMAL);
+        render::Render().renderCel(tmpImage.get(),
+                                   srcCel,
+                                   dstSprite,
+                                   srcImage,
+                                   srcCel->layer(),
+                                   dstSprite->palette(dstCel->frame()),
+                                   gfx::Rect(gfx::Point(0, 0), srcCel->bounds().size()),
+                                   gfx::Clip(0, 0, tmpImage->bounds()),
+                                   255,
+                                   BlendMode::NORMAL);
 
         doc::ImageRef tilemap = dstCel->imageRef();
 
-        draw_image_into_new_tilemap_cel(
-          cmds, static_cast<doc::LayerTilemap*>(dstLayer), dstCel.get(),
-          tmpImage.get(),
-          srcCel->bounds().origin(),
-          srcCel->bounds().origin(),
-          srcCel->bounds(),
-          tilemap);
+        draw_image_into_new_tilemap_cel(cmds,
+                                        static_cast<doc::LayerTilemap*>(dstLayer),
+                                        dstCel.get(),
+                                        tmpImage.get(),
+                                        srcCel->bounds().origin(),
+                                        srcCel->bounds().origin(),
+                                        srcCel->bounds(),
+                                        tilemap);
       }
       dstCel->setPosition(srcCel->position());
     }
     // Tilemap -> Image (so we convert the tilemap to a regular image)
     else {
-      render::Render().renderCel(
-        dstCel->image(),
-        srcCel,
-        dstSprite,
-        srcImage,
-        srcCel->layer(),
-        dstSprite->palette(dstCel->frame()),
-        gfx::Rect(gfx::Point(0, 0), srcCel->bounds().size()),
-        gfx::Clip(0, 0, dstCel->image()->bounds()),
-        255, BlendMode::NORMAL);
+      render::Render().renderCel(dstCel->image(),
+                                 srcCel,
+                                 dstSprite,
+                                 srcImage,
+                                 srcCel->layer(),
+                                 dstSprite->palette(dstCel->frame()),
+                                 gfx::Rect(gfx::Point(0, 0), srcCel->bounds().size()),
+                                 gfx::Clip(0, 0, dstCel->image()->bounds()),
+                                 255,
+                                 BlendMode::NORMAL);
 
       // Shrink image
       if (dstLayer->isTransparent()) {
@@ -284,75 +401,76 @@ Cel* create_cel_copy(CmdSequence* cmds,
   // Image -> Tilemap (we'll need to generate new tilesets)
   else if (dstLayer->isTilemap()) {
     doc::ImageRef tilemap = dstCel->imageRef();
-    draw_image_into_new_tilemap_cel(
-      cmds, static_cast<doc::LayerTilemap*>(dstLayer), dstCel.get(),
-      srcImage,
-      // Use the grid origin of the sprite
-      srcCel->sprite()->gridBounds().origin(),
-      srcCel->bounds().origin(),
-      srcCel->bounds(),
-      tilemap);
+    draw_image_into_new_tilemap_cel(cmds,
+                                    static_cast<doc::LayerTilemap*>(dstLayer),
+                                    dstCel.get(),
+                                    srcImage,
+                                    // Use the grid origin of the sprite
+                                    srcCel->sprite()->gridBounds().origin(),
+                                    srcCel->bounds().origin(),
+                                    srcCel->bounds(),
+                                    tilemap);
   }
   else if ((dstSprite->pixelFormat() != srcImage->pixelFormat()) ||
            // If both images are indexed but with different palette, we can
            // convert the source cel to RGB first.
-           (dstSprite->pixelFormat() == IMAGE_INDEXED &&
-            srcImage->pixelFormat() == IMAGE_INDEXED &&
-            srcCel->sprite()->palette(srcCel->frame())->countDiff(
-              dstSprite->palette(dstFrame), nullptr, nullptr))) {
+           (dstSprite->pixelFormat() == IMAGE_INDEXED && srcImage->pixelFormat() == IMAGE_INDEXED &&
+            srcCel->sprite()
+              ->palette(srcCel->frame())
+              ->countDiff(dstSprite->palette(dstFrame), nullptr, nullptr))) {
     ImageRef tmpImage(Image::create(IMAGE_RGB, srcImage->width(), srcImage->height()));
     tmpImage->clear(0);
 
-    render::convert_pixel_format(
-      srcImage,
-      tmpImage.get(),
-      IMAGE_RGB,
-      render::Dithering(),
-      srcCel->sprite()->rgbMap(srcCel->frame()),
-      srcCel->sprite()->palette(srcCel->frame()),
-      srcCel->layer()->isBackground(),
-      0);
+    render::convert_pixel_format(srcImage,
+                                 tmpImage.get(),
+                                 IMAGE_RGB,
+                                 render::Dithering(),
+                                 srcCel->sprite()->rgbMap(srcCel->frame()),
+                                 srcCel->sprite()->palette(srcCel->frame()),
+                                 srcCel->layer()->isBackground(),
+                                 0);
 
-    render::convert_pixel_format(
-      tmpImage.get(),
-      dstCel->image(),
-      IMAGE_INDEXED,
-      render::Dithering(),
-      dstSprite->rgbMap(dstFrame),
-      dstSprite->palette(dstFrame),
-      srcCel->layer()->isBackground(),
-      dstSprite->transparentColor());
+    render::convert_pixel_format(tmpImage.get(),
+                                 dstCel->image(),
+                                 IMAGE_INDEXED,
+                                 render::Dithering(),
+                                 dstSprite->rgbMap(dstFrame),
+                                 dstSprite->palette(dstFrame),
+                                 srcCel->layer()->isBackground(),
+                                 dstSprite->transparentColor());
   }
   // Simple case, where we copy both images
   else {
-    render::composite_image(
-      dstCel->image(),
-      srcImage,
-      srcCel->sprite()->palette(srcCel->frame()),
-      0, 0, 255, BlendMode::SRC);
+    render::composite_image(dstCel->image(),
+                            srcImage,
+                            srcCel->sprite()->palette(srcCel->frame()),
+                            0,
+                            0,
+                            255,
+                            BlendMode::SRC);
   }
 
   // Resize a referece cel to a non-reference layer
   if (srcCel->layer()->isReference() && !dstLayer->isReference()) {
     gfx::RectF srcBounds = srcCel->boundsF();
 
-    std::unique_ptr<Cel> dstCel2(
-      new Cel(dstFrame,
-              ImageRef(Image::create(dstSprite->pixelFormat(),
-                                     std::ceil(srcBounds.w),
-                                     std::ceil(srcBounds.h)))));
-    algorithm::resize_image(
-      dstCel->image(), dstCel2->image(),
-      algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR,
-      nullptr, nullptr, 0);
+    std::unique_ptr<Cel> dstCel2(new Cel(
+      dstFrame,
+      ImageRef(
+        Image::create(dstSprite->pixelFormat(), std::ceil(srcBounds.w), std::ceil(srcBounds.h)))));
+    algorithm::resize_image(dstCel->image(),
+                            dstCel2->image(),
+                            algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR,
+                            nullptr,
+                            nullptr,
+                            0);
 
     dstCel.reset(dstCel2.release());
     dstCel->setPosition(gfx::Point(srcBounds.origin()));
   }
   // Copy original cel bounds
   else if (!dstLayer->isTilemap()) {
-    if (srcCel->layer() &&
-        srcCel->layer()->isReference()) {
+    if (srcCel->layer() && srcCel->layer()->isReference()) {
       dstCel->setBoundsF(srcCel->boundsF());
     }
     else {
@@ -363,18 +481,18 @@ Cel* create_cel_copy(CmdSequence* cmds,
   return dstCel.release();
 }
 
-void draw_image_into_new_tilemap_cel(
-  CmdSequence* cmds,
-  doc::LayerTilemap* dstLayer,
-  doc::Cel* dstCel,
-  const doc::Image* srcImage,
-  const gfx::Point& gridOrigin,
-  const gfx::Point& srcImagePos,
-  const gfx::Rect& canvasBounds,
-  doc::ImageRef& newTilemap)
+void draw_image_into_new_tilemap_cel(CmdSequence* cmds,
+                                     doc::LayerTilemap* dstLayer,
+                                     doc::Cel* dstCel,
+                                     const doc::Image* srcImage,
+                                     const gfx::Point& gridOrigin,
+                                     const gfx::Point& srcImagePos,
+                                     const gfx::Rect& canvasBounds,
+                                     doc::ImageRef& newTilemap)
 {
   ASSERT(dstLayer->isTilemap());
 
+  auto doc = static_cast<Doc*>(dstLayer->sprite()->document());
   doc::Tileset* tileset = dstLayer->tileset();
   doc::Grid grid = tileset->grid();
   grid.origin(gridOrigin);
@@ -383,9 +501,7 @@ void draw_image_into_new_tilemap_cel(
   const gfx::Rect tilemapBounds = grid.canvasToTile(canvasBounds);
 
   if (!newTilemap) {
-    newTilemap.reset(doc::Image::create(IMAGE_TILEMAP,
-                                        tilemapBounds.w,
-                                        tilemapBounds.h));
+    newTilemap.reset(doc::Image::create(IMAGE_TILEMAP, tilemapBounds.w, tilemapBounds.h));
     newTilemap->setMaskColor(doc::notile);
     newTilemap->clear(doc::notile);
   }
@@ -396,65 +512,68 @@ void draw_image_into_new_tilemap_cel(
 
   for (const gfx::Point& tilePt : grid.tilesInCanvasRegion(gfx::Region(canvasBounds))) {
     const gfx::Point tilePtInCanvas = grid.tileToCanvas(tilePt);
-    doc::ImageRef tileImage(
-      doc::crop_image(srcImage,
-                      tilePtInCanvas.x-srcImagePos.x,
-                      tilePtInCanvas.y-srcImagePos.y,
-                      tileSize.w, tileSize.h,
-                      srcImage->maskColor()));
+    doc::ImageRef tileImage(doc::crop_image(srcImage,
+                                            tilePtInCanvas.x - srcImagePos.x,
+                                            tilePtInCanvas.y - srcImagePos.y,
+                                            tileSize.w,
+                                            tileSize.h,
+                                            srcImage->maskColor()));
     if (grid.hasMask())
       mask_image(tileImage.get(), grid.mask().get());
 
     preprocess_transparent_pixels(tileImage.get());
 
     doc::tile_index tileIndex;
-    if (!tileset->findTileIndex(tileImage, tileIndex)) {
+    doc::tile_flags tileFlag = 0;
+
+    if (!find_tile(tileset, tileImage, tileIndex, tileFlag)) {
       auto addTile = new cmd::AddTile(tileset, tileImage);
 
       if (cmds)
         cmds->executeAndAdd(addTile);
       else {
         // TODO a little hacky
-        addTile->execute(
-          static_cast<Doc*>(dstLayer->sprite()->document())->context());
+        addTile->execute(doc->context());
       }
 
       tileIndex = addTile->tileIndex();
 
       if (!cmds)
         delete addTile;
+
+      doc->notifyAfterAddTile(dstLayer, dstCel->frame(), tileIndex);
     }
 
     // We were using newTilemap->putPixel() directly but received a
     // crash report about an "access violation". So now we've added
     // some checks to the operation.
     {
-      const int u = tilePt.x-tilemapBounds.x;
-      const int v = tilePt.y-tilemapBounds.y;
+      const int u = tilePt.x - tilemapBounds.x;
+      const int v = tilePt.y - tilemapBounds.y;
       ASSERT((u >= 0) && (v >= 0) && (u < newTilemap->width()) && (v < newTilemap->height()));
-      doc::put_pixel(newTilemap.get(), u, v, tileIndex);
+      doc::put_pixel(newTilemap.get(), u, v, doc::tile(tileIndex, tileFlag));
     }
   }
 
-  static_cast<Doc*>(dstLayer->sprite()->document())
-    ->notifyTilesetChanged(tileset);
+  doc->notifyTilesetChanged(tileset);
 
   dstCel->data()->setImage(newTilemap, dstLayer);
   dstCel->setPosition(grid.tileToCanvas(tilemapBounds.origin()));
 }
 
-void modify_tilemap_cel_region(
-  CmdSequence* cmds,
-  doc::Cel* cel,
-  doc::Tileset* tileset,
-  const gfx::Region& region,
-  const TilesetMode tilesetMode,
-  const GetTileImageFunc& getTileImage,
-  const gfx::Region& forceRegion)
+void modify_tilemap_cel_region(CmdSequence* cmds,
+                               doc::Cel* cel,
+                               doc::Tileset* tileset,
+                               const gfx::Region& region,
+                               const TilesetMode tilesetMode,
+                               const GetTileImageFunc& getTileImage,
+                               const gfx::Region& forceRegion)
 {
   OPS_TRACE("modify_tilemap_cel_region %d %d %d %d\n",
-            region.bounds().x, region.bounds().y,
-            region.bounds().w, region.bounds().h);
+            region.bounds().x,
+            region.bounds().y,
+            region.bounds().w,
+            region.bounds().h);
 
   if (region.isEmpty())
     return;
@@ -485,29 +604,42 @@ void modify_tilemap_cel_region(
             " - oldTilemapBounds  =%d %d %d %d\n"
             " - patchTilemapBounds=%d %d %d %d (region.bounds = %d %d %d %d)\n"
             " - newTilemapBounds  =%d %d %d %d\n",
-            grid.origin().x, grid.origin().y,
-            cel->position().x, cel->position().y,
-            oldTilemapBounds.x, oldTilemapBounds.y, oldTilemapBounds.w, oldTilemapBounds.h,
-            patchTilemapBounds.x, patchTilemapBounds.y, patchTilemapBounds.w, patchTilemapBounds.h,
-            region.bounds().x, region.bounds().y, region.bounds().w, region.bounds().h,
-            newTilemapBounds.x, newTilemapBounds.y, newTilemapBounds.w, newTilemapBounds.h);
+            grid.origin().x,
+            grid.origin().y,
+            cel->position().x,
+            cel->position().y,
+            oldTilemapBounds.x,
+            oldTilemapBounds.y,
+            oldTilemapBounds.w,
+            oldTilemapBounds.h,
+            patchTilemapBounds.x,
+            patchTilemapBounds.y,
+            patchTilemapBounds.w,
+            patchTilemapBounds.h,
+            region.bounds().x,
+            region.bounds().y,
+            region.bounds().w,
+            region.bounds().h,
+            newTilemapBounds.x,
+            newTilemapBounds.y,
+            newTilemapBounds.w,
+            newTilemapBounds.h);
 
   // Autogenerate tiles
-  if (tilesetMode == TilesetMode::Auto ||
-      tilesetMode == TilesetMode::Stack) {
+  if (tilesetMode == TilesetMode::Auto || tilesetMode == TilesetMode::Stack) {
     // TODO create a smaller image
     doc::ImageRef newTilemap(
-      doc::Image::create(IMAGE_TILEMAP,
-                         newTilemapBounds.w,
-                         newTilemapBounds.h));
+      doc::Image::create(IMAGE_TILEMAP, newTilemapBounds.w, newTilemapBounds.h));
 
     newTilemap->setMaskColor(doc::notile);
-    newTilemap->clear(doc::notile);   // TODO find the tile with empty content?
-    newTilemap->copy(
-      cel->image(),
-      gfx::Clip(oldTilemapBounds.x-newTilemapBounds.x,
-                oldTilemapBounds.y-newTilemapBounds.y, 0, 0,
-                oldTilemapBounds.w, oldTilemapBounds.h));
+    newTilemap->clear(doc::notile); // TODO find the tile with empty content?
+    newTilemap->copy(cel->image(),
+                     gfx::Clip(oldTilemapBounds.x - newTilemapBounds.x,
+                               oldTilemapBounds.y - newTilemapBounds.y,
+                               0,
+                               0,
+                               oldTilemapBounds.w,
+                               oldTilemapBounds.h));
 
     gfx::Region tilePtsRgn;
 
@@ -521,26 +653,28 @@ void modify_tilemap_cel_region(
     std::vector<bool> modifiedTileIndexes(tileset->size(), false);
     std::vector<size_t> tilesHistogram(tileset->size(), 0);
     if (tilesetMode == TilesetMode::Auto) {
-      for_each_tile_using_tileset(
-        tileset, [tileset, &tilesHistogram](const doc::tile_t t){
-                   if (t != doc::notile) {
-                     doc::tile_index ti = doc::tile_geti(t);
-                     if (ti >= 0 && ti < tileset->size())
-                       ++tilesHistogram[ti];
-                   }
-                 });
+      for_each_tile_using_tileset(tileset, [tileset, &tilesHistogram](const doc::tile_t t) {
+        if (t != doc::notile) {
+          doc::tile_index ti = doc::tile_geti(t);
+          if (ti >= 0 && ti < tileset->size())
+            ++tilesHistogram[ti];
+        }
+      });
     }
 
     for (const gfx::Point& tilePt : grid.tilesInCanvasRegion(regionToPatch)) {
-      const int u = tilePt.x-newTilemapBounds.x;
-      const int v = tilePt.y-newTilemapBounds.y;
+      const int u = tilePt.x - newTilemapBounds.x;
+      const int v = tilePt.y - newTilemapBounds.y;
       OPS_TRACE(" - modify tile xy=%d %d uv=%d %d\n", tilePt.x, tilePt.y, u, v);
       if (!newTilemap->bounds().contains(u, v))
         continue;
 
       const doc::tile_t t = newTilemap->getPixel(u, v);
-      const doc::tile_index ti = (t != doc::notile ? doc::tile_geti(t): doc::notile);
+      const doc::tile_index ti = (t != doc::notile ? doc::tile_geti(t) : doc::notile);
       const doc::ImageRef existentTileImage = tileset->get(ti);
+      if (!existentTileImage) {
+        continue;
+      }
 
       const gfx::Rect tileInCanvasRc(grid.tileToCanvas(tilePt), tileSize);
       ImageRef tileImage(getTileImage(existentTileImage, tileInCanvasRc));
@@ -549,27 +683,27 @@ void modify_tilemap_cel_region(
 
       preprocess_transparent_pixels(tileImage.get());
 
-      tile_index tileIndex;
-      if (tileset->findTileIndex(tileImage, tileIndex)) {
+      doc::tile_index tileIndex;
+      doc::tile_flags tileFlag = 0;
+
+      if (find_tile(tileset, tileImage, tileIndex, tileFlag)) {
         // We can re-use an existent tile (tileIndex) from the tileset
       }
-      else if (tilesetMode == TilesetMode::Auto &&
-               t != doc::notile &&
-               ti >= 0 && ti < tilesHistogram.size() &&
+      else if (tilesetMode == TilesetMode::Auto && t != doc::notile && ti >= 0 &&
+               ti < tilesHistogram.size() &&
                // If the tile is just used once, we can modify this
                // same tile
                tilesHistogram[ti] == 1) {
         // Common case: Re-utilize the same tile in Auto mode.
         tileIndex = ti;
         cmds->executeAndAdd(
-          new cmd::CopyTileRegion(
-            existentTileImage.get(),
-            tileImage.get(),
-            gfx::Region(tileImage->bounds()), // TODO calculate better region
-            gfx::Point(0, 0),
-            false,
-            tileIndex,
-            tileset));
+          new cmd::CopyTileRegion(existentTileImage.get(),
+                                  tileImage.get(),
+                                  gfx::Region(tileImage->bounds()), // TODO calculate better region
+                                  gfx::Point(0, 0),
+                                  false,
+                                  tileIndex,
+                                  tileset));
       }
       else {
         auto addTile = new cmd::AddTile(tileset, tileImage);
@@ -580,10 +714,8 @@ void modify_tilemap_cel_region(
 
       // If the tile changed, we have to remove the old tile index
       // (ti) from the histogram count.
-      if (tilesetMode == TilesetMode::Auto &&
-          t != doc::notile &&
-          ti >= 0 && ti < tilesHistogram.size() &&
-          ti != tileIndex) {
+      if (tilesetMode == TilesetMode::Auto && t != doc::notile && ti >= 0 &&
+          ti < tilesHistogram.size() && ti != tileIndex) {
         --tilesHistogram[ti];
 
         // It indicates that the tile "ti" was modified to
@@ -592,19 +724,16 @@ void modify_tilemap_cel_region(
         modifiedTileIndexes[ti] = true;
       }
 
-      OPS_TRACE(" - tile %d -> %d\n",
-                (t == doc::notile ? -1: ti),
-                tileIndex);
+      OPS_TRACE(" - tile %d -> %d\n", (t == doc::notile ? -1 : ti), tileIndex);
 
-      const doc::tile_t tile = doc::tile(tileIndex, 0);
+      const doc::tile_t tile = doc::tile(tileIndex, tileFlag);
       if (t != tile) {
         newTilemap->putPixel(u, v, tile);
         tilePtsRgn |= gfx::Region(gfx::Rect(u, v, 1, 1));
 
         // We add the new one tileIndex in the histogram count.
-        if (tilesetMode == TilesetMode::Auto &&
-            tileIndex != doc::notile &&
-            tileIndex >= 0 && tileIndex < tilesHistogram.size()) {
+        if (tilesetMode == TilesetMode::Auto && tile != doc::notile && tileIndex >= 0 &&
+            tileIndex < tilesHistogram.size() && ti != tileIndex) {
           ++tilesHistogram[tileIndex];
         }
       }
@@ -614,26 +743,18 @@ void modify_tilemap_cel_region(
         newTilemap->height() != cel->image()->height()) {
       gfx::Point newPos = grid.tileToCanvas(newTilemapBounds.origin());
       if (cel->position() != newPos) {
-        cmds->executeAndAdd(
-          new cmd::SetCelPosition(cel, newPos.x, newPos.y));
+        cmds->executeAndAdd(new cmd::SetCelPosition(cel, newPos.x, newPos.y));
       }
-      cmds->executeAndAdd(
-        new cmd::ReplaceImage(cel->sprite(), cel->imageRef(), newTilemap));
+      cmds->executeAndAdd(new cmd::ReplaceImage(cel->sprite(), cel->imageRef(), newTilemap));
     }
     else if (!tilePtsRgn.isEmpty()) {
       cmds->executeAndAdd(
-        new cmd::CopyRegion(
-          cel->image(),
-          newTilemap.get(),
-          tilePtsRgn,
-          gfx::Point(0, 0)));
+        new cmd::CopyRegion(cel->image(), newTilemap.get(), tilePtsRgn, gfx::Point(0, 0)));
     }
 
     // Remove unused tiles
     if (tilesetMode == TilesetMode::Auto) {
-      remove_unused_tiles_from_tileset(cmds, tileset,
-                                       tilesHistogram,
-                                       modifiedTileIndexes);
+      remove_unused_tiles_from_tileset(cmds, tileset, tilesHistogram, modifiedTileIndexes);
     }
 
     doc->notifyTilesetChanged(tileset);
@@ -652,6 +773,8 @@ void modify_tilemap_cel_region(
         continue;
 
       const doc::tile_index ti = doc::tile_geti(t);
+      const doc::tile_flags tf = doc::tile_getf(t);
+
       const doc::ImageRef existentTileImage = tileset->get(ti);
       if (!existentTileImage) {
         // TODO add support to fill the tileset with the tile "ti"
@@ -663,9 +786,46 @@ void modify_tilemap_cel_region(
       if (grid.hasMask())
         mask_image(tileImage.get(), grid.mask().get());
 
+      const gfx::Rect tileImageBounds = tileImage->bounds();
+
       gfx::Region tileRgn(tileInCanvasRc);
       tileRgn.createIntersection(tileRgn, region);
       tileRgn.offset(-tileInCanvasRc.origin());
+
+      // TODO implement all flips at once
+
+      // Undo flips in tileImage and tileRgn
+      if (tf & doc::tile_f_xflip) {
+        doc::algorithm::flip_image(tileImage.get(),
+                                   tileImageBounds,
+                                   doc::algorithm::FlipHorizontal);
+
+        gfx::Region flippedTileRgn;
+        for (auto& rc : tileRgn) {
+          flippedTileRgn |= gfx::Region(
+            gfx::Rect(tileImageBounds.x2() - rc.x2(), rc.y, rc.w, rc.h));
+        }
+        tileRgn = flippedTileRgn;
+      }
+      if (tf & doc::tile_f_yflip) {
+        doc::algorithm::flip_image(tileImage.get(), tileImageBounds, doc::algorithm::FlipVertical);
+
+        gfx::Region flippedTileRgn;
+        for (auto& rc : tileRgn) {
+          flippedTileRgn |= gfx::Region(
+            gfx::Rect(rc.x, tileImageBounds.y2() - rc.y2(), rc.w, rc.h));
+        }
+        tileRgn = flippedTileRgn;
+      }
+      if (tf & doc::tile_f_dflip) {
+        doc::algorithm::flip_image(tileImage.get(), tileImageBounds, doc::algorithm::FlipDiagonal);
+
+        gfx::Region flippedTileRgn;
+        for (auto& rc : tileRgn) {
+          flippedTileRgn |= gfx::Region(gfx::Rect(rc.y, rc.x, rc.h, rc.w));
+        }
+        tileRgn = flippedTileRgn;
+      }
 
       ImageRef tileDstImage = tileset->get(ti);
 
@@ -695,9 +855,7 @@ void modify_tilemap_cel_region(
           mods.push_back(mod);
         }
         else {
-          copy_image(tileDstImage.get(),
-                     tileImage.get(),
-                     tileRgn);
+          copy_image(tileDstImage.get(), tileImage.get(), tileRgn);
           tileset->notifyTileContentChange(ti);
         }
       }
@@ -708,15 +866,13 @@ void modify_tilemap_cel_region(
       for (auto& mod : mods) {
         // TODO avoid creating several CopyTileRegion for the same tile,
         //      merge all mods for the same tile in some way
-        cmds->executeAndAdd(
-          new cmd::CopyTileRegion(
-            mod.tileDstImage.get(),
-            mod.tileImage.get(),
-            mod.tileRgn,
-            gfx::Point(0, 0),
-            false,
-            mod.tileIndex,
-            tileset));
+        cmds->executeAndAdd(new cmd::CopyTileRegion(mod.tileDstImage.get(),
+                                                    mod.tileImage.get(),
+                                                    mod.tileRgn,
+                                                    gfx::Point(0, 0),
+                                                    false,
+                                                    mod.tileIndex,
+                                                    tileset));
       }
     }
 
@@ -751,18 +907,15 @@ void clear_mask_from_cel(CmdSequence* cmds,
     doc::Mask* mask = doc->mask();
 
     modify_tilemap_cel_region(
-      cmds, cel, nullptr,
+      cmds,
+      cel,
+      nullptr,
       gfx::Region(doc->mask()->bounds()),
       tilesetMode,
       [bgcolor, mask](const doc::ImageRef& origTile,
                       const gfx::Rect& tileBoundsInCanvas) -> doc::ImageRef {
         doc::ImageRef modified(doc::Image::createCopy(origTile.get()));
-        doc::algorithm::fill_selection(
-          modified.get(),
-          tileBoundsInCanvas,
-          mask,
-          bgcolor,
-          nullptr);
+        doc::algorithm::fill_selection(modified.get(), tileBoundsInCanvas, mask, bgcolor, nullptr);
         return modified;
       });
   }
@@ -771,11 +924,10 @@ void clear_mask_from_cel(CmdSequence* cmds,
   }
 }
 
-static void remove_unused_tiles_from_tileset(
-  CmdSequence* cmds,
-  doc::Tileset* tileset,
-  std::vector<size_t>& tilesHistogram,
-  const std::vector<bool>& modifiedTileIndexes)
+static void remove_unused_tiles_from_tileset(CmdSequence* cmds,
+                                             doc::Tileset* tileset,
+                                             std::vector<size_t>& tilesHistogram,
+                                             const std::vector<bool>& modifiedTileIndexes)
 {
   OPS_TRACE("remove_unused_tiles_from_tileset\n");
 
@@ -785,28 +937,28 @@ static void remove_unused_tiles_from_tileset(
   std::vector<size_t> tilesHistogram2(n, 0);
 #endif
 
-  for_each_tile_using_tileset(
-    tileset,
-    [&n
+  for_each_tile_using_tileset(tileset,
+                              [&n
 #ifdef _DEBUG
-     , &tilesHistogram2
+                               ,
+                               &tilesHistogram2
 #endif
-     ](const doc::tile_t t){
-      if (t != doc::notile) {
-        const doc::tile_index ti = doc::tile_geti(t);
-        n = std::max<int>(n, ti+1);
+  ](const doc::tile_t t) {
+                                if (t != doc::notile) {
+                                  const doc::tile_index ti = doc::tile_geti(t);
+                                  n = std::max<int>(n, ti + 1);
 #ifdef _DEBUG
-        // This check is necessary in case the tilemap has a reference
-        // to a tile outside the valid range (e.g. when we resize the
-        // tileset deleting tiles that will not be present anymore)
-        if (ti >= 0 && ti < tilesHistogram2.size())
-          ++tilesHistogram2[ti];
+                                  // This check is necessary in case the tilemap has a reference
+                                  // to a tile outside the valid range (e.g. when we resize the
+                                  // tileset deleting tiles that will not be present anymore)
+                                  if (ti >= 0 && ti < tilesHistogram2.size())
+                                    ++tilesHistogram2[ti];
 #endif
-      }
-    });
+                                }
+                              });
 
 #ifdef _DEBUG
-  for (int k=0; k<tilesHistogram.size(); ++k) {
+  for (int k = 0; k < tilesHistogram.size(); ++k) {
     OPS_TRACE("comparing [%d] -> %d vs %d\n", k, tilesHistogram[k], tilesHistogram2[k]);
     ASSERT(tilesHistogram[k] == tilesHistogram2[k]);
   }
@@ -815,12 +967,13 @@ static void remove_unused_tiles_from_tileset(
   doc::Remap remap(n);
   doc::tile_index ti, tj;
   ti = tj = 0;
-  for (; ti<remap.size(); ++ti) {
+  for (; ti < remap.size(); ++ti) {
     OPS_TRACE(" - ti=%d tj=%d tilesHistogram[%d]=%d\n",
-              ti, tj, ti, (ti < tilesHistogram.size() ? tilesHistogram[ti]: 0));
-    if (ti < tilesHistogram.size() &&
-        tilesHistogram[ti] == 0 &&
-        modifiedTileIndexes[ti]) {
+              ti,
+              tj,
+              ti,
+              (ti < tilesHistogram.size() ? tilesHistogram[ti] : 0));
+    if (ti < tilesHistogram.size() && tilesHistogram[ti] == 0 && modifiedTileIndexes[ti]) {
       cmds->executeAndAdd(new cmd::RemoveTile(tileset, tj));
       // Map to nothing, so the map can be invertible
       remap.notile(ti);
@@ -832,7 +985,7 @@ static void remove_unused_tiles_from_tileset(
 
   if (!remap.isIdentity()) {
 #ifdef _DEBUG
-    for (ti=0; ti<remap.size(); ++ti) {
+    for (ti = 0; ti < remap.size(); ++ti) {
       OPS_TRACE(" - remap tile[%d] -> %d\n", ti, remap[ti]);
     }
 #endif
@@ -840,12 +993,11 @@ static void remove_unused_tiles_from_tileset(
   }
 }
 
-void move_tiles_in_tileset(
-  CmdSequence* cmds,
-  doc::Tileset* tileset,
-  doc::PalettePicks& picks,
-  int& currentEntry,
-  int beforeIndex)
+void move_tiles_in_tileset(CmdSequence* cmds,
+                           doc::Tileset* tileset,
+                           doc::PalettePicks& picks,
+                           int& currentEntry,
+                           int beforeIndex)
 {
   OPS_TRACE("move_tiles_in_tileset\n");
 
@@ -870,17 +1022,16 @@ void move_tiles_in_tileset(
 
   // New selection
   auto oldPicks = picks;
-  for (int i=0; i<picks.size(); ++i)
+  for (int i = 0; i < picks.size(); ++i)
     picks[remap[i]] = oldPicks[i];
   currentEntry = remap[currentEntry];
 }
 
-void copy_tiles_in_tileset(
-  CmdSequence* cmds,
-  doc::Tileset* tileset,
-  doc::PalettePicks& picks,
-  int& currentEntry,
-  int beforeIndex)
+void copy_tiles_in_tileset(CmdSequence* cmds,
+                           doc::Tileset* tileset,
+                           doc::PalettePicks& picks,
+                           int& currentEntry,
+                           int beforeIndex)
 {
   // We cannot move tiles before the empty tile
   if (beforeIndex == 0)
@@ -889,14 +1040,17 @@ void copy_tiles_in_tileset(
   OPS_TRACE("copy_tiles_in_tileset beforeIndex=%d npicks=%d\n", beforeIndex, picks.picks());
 
   std::vector<ImageRef> newTiles;
-  for (int i=0; i<picks.size(); ++i) {
+  std::vector<UserData> newDatas;
+  for (int i = 0; i < picks.size(); ++i) {
     if (!picks[i])
       continue;
     else if (i >= 0 && i < tileset->size()) {
       newTiles.emplace_back(Image::createCopy(tileset->get(i).get()));
+      newDatas.emplace_back(tileset->getTileData(i));
     }
     else {
       newTiles.emplace_back(tileset->makeEmptyTile());
+      newDatas.emplace_back(UserData());
     }
   }
 
@@ -914,15 +1068,15 @@ void copy_tiles_in_tileset(
   int j = 0;
   picks.resize(m);
   ASSERT(newTiles.size() == npicks);
-  for (int i=0; i<m; ++i) {
+  for (int i = 0; i < m; ++i) {
     picks[i] = (i >= beforeIndex && i < beforeIndex + npicks);
     if (picks[i]) {
       // Fill the gap between the end of the tileset and the
       // "beforeIndex" with empty tiles
       while (tileset->size() < i)
         cmds->executeAndAdd(new cmd::AddTile(tileset, tileset->makeEmptyTile()));
-
-      tileset->insert(i, newTiles[j++]);
+      tileset->insert(i, newTiles[j], newDatas[j]);
+      j++;
       cmds->executeAndAdd(new cmd::AddTile(tileset, i));
     }
   }

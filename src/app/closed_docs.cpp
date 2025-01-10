@@ -1,16 +1,17 @@
 // Aseprite
-// Copyright (C) 2019-2020  Igara Studio S.A.
+// Copyright (C) 2019-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/closed_docs.h"
 #include "app/doc.h"
 #include "app/pref/preferences.h"
+#include "base/thread.h"
 
 #include <algorithm>
 #include <limits>
@@ -19,22 +20,23 @@
 
 namespace app {
 
-ClosedDocs::ClosedDocs(const Preferences& pref)
-  : m_done(false)
+ClosedDocs::ClosedDocs(const Preferences& pref) : m_done(false)
 {
   if (pref.general.dataRecovery())
-    m_dataRecoveryPeriodMSecs = int(1000.0*60.0*pref.general.dataRecoveryPeriod());
+    m_dataRecoveryPeriodMSecs = int(1000.0 * 60.0 * pref.general.dataRecoveryPeriod());
   else
     m_dataRecoveryPeriodMSecs = 0;
 
   if (pref.general.keepClosedSpriteOnMemory())
-    m_keepClosedDocAliveForMSecs = int(1000.0*60.0*pref.general.keepClosedSpriteOnMemoryFor());
+    m_keepClosedDocAliveForMSecs = int(1000.0 * 60.0 * pref.general.keepClosedSpriteOnMemoryFor());
   else
     m_keepClosedDocAliveForMSecs = 0;
 
   CLOSEDOC_TRACE("CLOSEDOC: Init",
-                 "dataRecoveryPeriod", m_dataRecoveryPeriodMSecs,
-                 "keepClosedDocs", m_keepClosedDocAliveForMSecs);
+                 "dataRecoveryPeriod",
+                 m_dataRecoveryPeriodMSecs,
+                 "keepClosedDocs",
+                 m_keepClosedDocAliveForMSecs);
 }
 
 ClosedDocs::~ClosedDocs()
@@ -61,8 +63,7 @@ bool ClosedDocs::hasClosedDocs()
     std::unique_lock<std::mutex> lock(m_mutex);
     result = !m_docs.empty();
   }
-  CLOSEDOC_TRACE("CLOSEDOC: Has closed docs?",
-                 (result ? "true": "false"));
+  CLOSEDOC_TRACE("CLOSEDOC: Has closed docs?", (result ? "true" : "false"));
   return result;
 }
 
@@ -79,7 +80,7 @@ void ClosedDocs::addClosedDoc(Doc* doc)
   m_docs.insert(m_docs.begin(), std::move(closedDoc));
 
   if (!m_thread.joinable())
-    m_thread = std::thread([this]{ backgroundThread(); });
+    m_thread = std::thread([this] { backgroundThread(); });
   else
     m_cv.notify_one();
 }
@@ -118,23 +119,25 @@ void ClosedDocs::backgroundThread()
 {
   CLOSEDOC_TRACE("CLOSEDOC: [BG] Background thread start");
 
+  base::this_thread::set_name("closed-docs");
+
   std::unique_lock<std::mutex> lock(m_mutex);
   while (!m_done) {
     base::tick_t now = base::current_tick();
     base::tick_t waitForMSecs = std::numeric_limits<base::tick_t>::max();
 
-    for (auto it=m_docs.begin(); it != m_docs.end(); ) {
+    for (auto it = m_docs.begin(); it != m_docs.end();) {
       const ClosedDoc& closedDoc = *it;
       auto doc = closedDoc.doc;
 
       base::tick_t diff = now - closedDoc.timestamp;
       if (diff >= m_keepClosedDocAliveForMSecs) {
-        if (// If we backup process is disabled
-            m_dataRecoveryPeriodMSecs == 0 ||
-            // Or this document doesn't need a backup (e.g. an unmodified document)
-            !doc->needsBackup() ||
-            // Or the document already has the backup done
-            doc->isFullyBackedUp()) {
+        if ( // If we backup process is disabled
+          m_dataRecoveryPeriodMSecs == 0 ||
+          // Or this document doesn't need a backup (e.g. an unmodified document)
+          !doc->needsBackup() ||
+          // Or the document already has the backup done
+          doc->isFullyBackedUp()) {
           // Finally delete the document (this is the place where we
           // delete all documents created/loaded by the user)
           CLOSEDOC_TRACE("CLOSEDOC: [BG] Delete doc", doc);
@@ -147,7 +150,7 @@ void ClosedDocs::backgroundThread()
         }
       }
       else {
-        waitForMSecs = std::min(waitForMSecs, m_keepClosedDocAliveForMSecs-diff);
+        waitForMSecs = std::min(waitForMSecs, m_keepClosedDocAliveForMSecs - diff);
         ++it;
       }
     }

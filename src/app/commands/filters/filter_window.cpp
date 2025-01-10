@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2020  Igara Studio S.A.
+// Copyright (C) 2020-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/commands/filters/filter_window.h"
@@ -17,19 +17,19 @@
 #include "app/ini_file.h"
 #include "app/modules/gui.h"
 #include "app/pref/preferences.h"
-#include "app/ui/editor/editor.h"
 
 namespace app {
 
 using namespace filters;
 using namespace ui;
 
-FilterWindow::FilterWindow(const char* title, const char* cfgSection,
+FilterWindow::FilterWindow(const char* title,
+                           const char* cfgSection,
                            FilterManagerImpl* filterMgr,
                            WithChannels withChannels,
                            WithTiled withTiled,
                            TiledMode tiledMode)
-  : Window(WithTitleBar, title)
+  : WindowWithHand(WithTitleBar, title)
   , m_cfgSection(cfgSection)
   , m_filterMgr(filterMgr)
   , m_hbox(HORIZONTAL)
@@ -40,9 +40,7 @@ FilterWindow::FilterWindow(const char* title, const char* cfgSection,
   , m_preview(filterMgr)
   , m_targetButton(filterMgr->pixelFormat(), (withChannels == WithChannelsSelector))
   , m_showPreview(Strings::filters_preview())
-  , m_tiledCheck(withTiled == WithTiledCheckBox ?
-                   new CheckBox(Strings::filters_tiled()) :
-                   nullptr)
+  , m_tiledCheck(withTiled == WithTiledCheckBox ? new CheckBox(Strings::filters_tiled()) : nullptr)
 {
   m_okButton.processMnemonicFromText();
   m_cancelButton.processMnemonicFromText();
@@ -75,7 +73,7 @@ FilterWindow::FilterWindow(const char* title, const char* cfgSection,
 
   if (m_tiledCheck) {
     m_tiledCheck->setSelected(tiledMode != TiledMode::NONE);
-    m_tiledCheck->Click.connect([this]{ onTiledChange(); });
+    m_tiledCheck->Click.connect([this] { onTiledChange(); });
 
     m_vbox.addChild(m_tiledCheck);
   }
@@ -85,6 +83,9 @@ FilterWindow::FilterWindow(const char* title, const char* cfgSection,
 
   // OK is magnetic (the default button)
   m_okButton.setFocusMagnet(true);
+
+  // Enable the Hand tool in the active editor.
+  enableHandTool(true);
 }
 
 FilterWindow::~FilterWindow()
@@ -150,17 +151,17 @@ void FilterWindow::setNewTarget(Target target)
   m_targetButton.setTarget(target);
 }
 
-void FilterWindow::onOk(Event& ev)
+void FilterWindow::onOk()
 {
   m_okButton.closeWindow();
 }
 
-void FilterWindow::onCancel(Event& ev)
+void FilterWindow::onCancel()
 {
   m_cancelButton.closeWindow();
 }
 
-void FilterWindow::onShowPreview(Event& ev)
+void FilterWindow::onShowPreview()
 {
   restartPreview();
 
@@ -188,9 +189,7 @@ void FilterWindow::onTiledChange()
 
   // Call derived class implementation of setupTiledMode() so the
   // filter is modified.
-  setupTiledMode(m_tiledCheck->isSelected() ?
-    TiledMode::BOTH:
-    TiledMode::NONE);
+  setupTiledMode(m_tiledCheck->isSelected() ? TiledMode::BOTH : TiledMode::NONE);
 
   // Restart the preview.
   restartPreview();
@@ -199,6 +198,16 @@ void FilterWindow::onTiledChange()
 void FilterWindow::stopPreview()
 {
   m_preview.stop();
+}
+
+void FilterWindow::onScrollChanged(Editor* editor)
+{
+  restartPreview();
+}
+
+void FilterWindow::onZoomChanged(Editor* editor)
+{
+  restartPreview();
 }
 
 } // namespace app

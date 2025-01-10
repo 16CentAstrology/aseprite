@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2022  Igara Studio S.A.
+// Copyright (C) 2022-2023  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/ui/drop_down_button.h"
@@ -34,23 +34,22 @@ DropDownButton::DropDownButton(const char* text)
   addChild(m_button);
   addChild(m_dropDown);
 
-  InitTheme.connect(
-    [this]{
-      auto theme = SkinTheme::get(this);
-      m_button->setStyle(theme->styles.dropDownButton());
-      m_dropDown->setStyle(theme->styles.dropDownExpandButton());
-      setChildSpacing(0);
-    });
+  InitTheme.connect([this] {
+    auto theme = SkinTheme::get(this);
+    m_button->setStyle(theme->styles.dropDownButton());
+    m_dropDown->setStyle(theme->styles.dropDownExpandButton());
+    setChildSpacing(0);
+  });
   initTheme();
 }
 
-void DropDownButton::onButtonClick(Event& ev)
+void DropDownButton::onButtonClick()
 {
   // Fire "Click" signal.
   Click();
 }
 
-void DropDownButton::onDropDownButtonClick(Event& ev)
+void DropDownButton::onDropDownButtonClick()
 {
   DropDownClick();
 }

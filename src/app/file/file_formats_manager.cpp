@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2021  Igara Studio S.A.
+// Copyright (C) 2021-2023  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/file/file_formats_manager.h"
@@ -30,6 +30,7 @@ extern FileFormat* CreateIcoFormat();
 extern FileFormat* CreateJpegFormat();
 extern FileFormat* CreatePcxFormat();
 extern FileFormat* CreatePngFormat();
+extern FileFormat* CreateQoiFormat();
 extern FileFormat* CreateSvgFormat();
 extern FileFormat* CreateTgaFormat();
 
@@ -75,6 +76,7 @@ FileFormatsManager::FileFormatsManager()
   registerFormat(CreatePsdFormat());
 #endif
 
+  registerFormat(CreateQoiFormat());
   registerFormat(CreateSvgFormat());
   registerFormat(CreateTgaFormat());
 
@@ -87,7 +89,7 @@ FileFormatsManager::~FileFormatsManager()
 {
   FileFormatsList::iterator end = this->end();
   for (FileFormatsList::iterator it = begin(); it != end; ++it) {
-    delete (*it);               // delete the FileFormat
+    delete (*it); // delete the FileFormat
   }
 }
 

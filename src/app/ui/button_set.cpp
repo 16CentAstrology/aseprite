@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/ui/button_set.h"
@@ -45,25 +45,16 @@ WidgetType buttonset_item_type()
   return type;
 }
 
-ButtonSet::Item::Item()
-  : Widget(buttonset_item_type())
-  , m_icon(NULL)
-  , m_hotColor(gfx::ColorNone)
+ButtonSet::Item::Item() : Widget(buttonset_item_type()), m_icon(NULL)
 {
   setup_mini_font(this);
   setAlign(CENTER | MIDDLE);
   setFocusStop(true);
 }
 
-void ButtonSet::Item::setHotColor(gfx::Color color)
-{
-  m_hotColor = color;
-}
-
-void ButtonSet::Item::setIcon(const SkinPartPtr& icon, bool mono)
+void ButtonSet::Item::setIcon(const SkinPartPtr& icon)
 {
   m_icon = icon;
-  m_mono = mono;
   invalidate();
 }
 
@@ -74,104 +65,25 @@ ButtonSet* ButtonSet::Item::buttonSet()
 
 void ButtonSet::Item::onPaint(ui::PaintEvent& ev)
 {
-  auto theme = SkinTheme::get(this);
-  Graphics* g = ev.graphics();
-  gfx::Rect rc = clientBounds();
-  gfx::Color fg;
-  SkinPartPtr nw;
-  gfx::Rect boxRc, textRc, iconRc;
-  gfx::Size iconSize;
-  if (m_icon)
-    iconSize = m_icon->size();
+  if (style()) {
+    gfx::Rect rc = clientBounds();
+    Grid::Info info = buttonSet()->getChildInfo(this);
+    bool isLastCol = (info.col + info.hspan >= info.grid_cols);
+    bool isLastRow = (info.row + info.vspan >= info.grid_rows);
+    // When gaps are negative we need to compensate client bounds size so the painting is based on a
+    // complete button, and not just the part not overlapped.
+    if (buttonSet()->m_colgap < 0 && !isLastCol)
+      rc.w -= buttonSet()->m_colgap;
+    if (buttonSet()->m_rowgap < 0 && !isLastRow)
+      rc.h -= buttonSet()->m_rowgap;
 
-  getTextIconInfo(
-    &boxRc, &textRc, &iconRc,
-    CENTER | (hasText() ? BOTTOM: MIDDLE),
-    iconSize.w, iconSize.h);
-
-  Grid::Info info = buttonSet()->getChildInfo(this);
-  bool isLastCol = (info.col+info.hspan >= info.grid_cols);
-  bool isLastRow = (info.row+info.vspan >= info.grid_rows);
-
-  if (m_icon || isLastRow) {
-    textRc.y -= 2*guiscale();
-    iconRc.y -= 1*guiscale();
-    if (isLastRow && info.row > 0) iconRc.y -= 2*guiscale();
-  }
-
-  if (!gfx::is_transparent(bgColor()))
-    g->fillRect(bgColor(), g->getClipBounds());
-
-  if (isSelected() || hasMouseOver()) {
-    if (hasCapture()) {
-      nw = theme->parts.buttonsetItemPushed();
-      fg = theme->colors.buttonSelectedText();
-    }
-    else {
-      nw = (hasFocus() ? theme->parts.buttonsetItemHotFocused():
-                         theme->parts.buttonsetItemHot());
-      fg = theme->colors.buttonHotText();
-    }
-  }
-  else {
-    nw = (hasFocus() ? theme->parts.buttonsetItemFocused():
-                       theme->parts.buttonsetItemNormal());
-    fg = theme->colors.buttonNormalText();
-  }
-
-  if (!isLastCol)
-    rc.w += 1*guiscale();
-
-  if (!isLastRow) {
-    if (nw == theme->parts.buttonsetItemHotFocused())
-      rc.h += 2*guiscale();
-    else
-      rc.h += 3*guiscale();
-  }
-
-  theme->drawRect(g, rc, nw.get(),
-                  gfx::is_transparent(m_hotColor));
-
-  if (!gfx::is_transparent(m_hotColor)) {
-    gfx::Rect rc2(rc);
-    gfx::Rect sprite(nw->spriteBounds());
-    gfx::Rect slices(nw->slicesBounds());
-    rc2.shrink(
-      gfx::Border(
-        slices.x-1, // TODO this "-1" is an ugly hack for the pal edit
-                    //      button, replace all this with styles
-        slices.y-1,
-        sprite.w-slices.w-slices.x-1,
-        sprite.h-slices.h-slices.y));
-    g->fillRect(m_hotColor, rc2);
-  }
-
-  if (m_icon) {
-    os::Surface* bmp = m_icon->bitmap(0);
-
-    if (!isEnabled())
-      g->drawColoredRgbaSurface(bmp, theme->colors.disabled(),
-                                iconRc.x, iconRc.y);
-    else if (isSelected() && hasCapture())
-      g->drawColoredRgbaSurface(bmp, theme->colors.buttonSelectedText(),
-                                iconRc.x, iconRc.y);
-    else if (m_mono)
-      g->drawColoredRgbaSurface(bmp, theme->colors.buttonNormalText(),
-                                iconRc.x, iconRc.y);
-    else
-      g->drawRgbaSurface(bmp, iconRc.x, iconRc.y);
-  }
-
-  if (hasText()) {
-    g->setFont(AddRef(font()));
-    g->drawUIText(text(), fg, gfx::ColorNone, textRc.origin(), 0);
+    theme()->paintWidget(ev.graphics(), this, style(), rc);
   }
 }
 
 bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
 {
   switch (msg->type()) {
-
     case kFocusEnterMessage:
     case kFocusLeaveMessage:
       if (isEnabled()) {
@@ -183,11 +95,9 @@ bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
     case ui::kKeyDownMessage:
       if (isEnabled() && hasText()) {
         KeyMessage* keymsg = static_cast<KeyMessage*>(msg);
-        bool mnemonicPressed = (msg->altPressed() &&
-                                isMnemonicPressed(keymsg));
+        bool mnemonicPressed = (msg->altPressed() && isMnemonicPressed(keymsg));
 
-        if (mnemonicPressed ||
-            (hasFocus() && keymsg->scancode() == kKeySpace)) {
+        if (mnemonicPressed || (hasFocus() && keymsg->scancode() == kKeySpace)) {
           buttonSet()->onSelectItem(this, true, msg);
           onClick();
         }
@@ -195,6 +105,8 @@ bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
       break;
 
     case ui::kMouseDownMessage:
+      if (!isEnabled())
+        return true;
       // Only for single-item and trigerred on mouse up ButtonSets: We
       // save the current selected item to restore it just in case the
       // user leaves the ButtonSet without releasing the mouse button
@@ -202,7 +114,7 @@ bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
       if (buttonSet()->m_triggerOnMouseUp) {
         // g_itemBeforeCapture can be >= 0 if we clicked other button
         // without releasing the first button.
-        //ASSERT(g_itemBeforeCapture < 0);
+        // ASSERT(g_itemBeforeCapture < 0);
         g_itemBeforeCapture = buttonSet()->selectedItem();
       }
 
@@ -210,8 +122,7 @@ bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
       buttonSet()->onSelectItem(this, true, msg);
       invalidate();
 
-      if (static_cast<MouseMessage*>(msg)->left() &&
-          !buttonSet()->m_triggerOnMouseUp) {
+      if (static_cast<MouseMessage*>(msg)->left() && !buttonSet()->m_triggerOnMouseUp) {
         onClick();
       }
       break;
@@ -239,8 +150,7 @@ bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
         if (buttonSet()->m_offerCapture) {
           if (offerCapture(static_cast<ui::MouseMessage*>(msg), buttonset_item_type())) {
             // Only for ButtonSets trigerred on mouse up.
-            if (buttonSet()->m_triggerOnMouseUp &&
-                g_itemBeforeCapture >= 0) {
+            if (buttonSet()->m_triggerOnMouseUp && g_itemBeforeCapture >= 0) {
               if (g_itemBeforeCapture < (int)children().size()) {
                 Item* item = dynamic_cast<Item*>(at(g_itemBeforeCapture));
                 ASSERT(item);
@@ -259,36 +169,12 @@ bool ButtonSet::Item::onProcessMessage(ui::Message* msg)
 
     case ui::kMouseLeaveMessage:
     case ui::kMouseEnterMessage:
+      if (!isEnabled())
+        return true;
       invalidate();
       break;
   }
   return Widget::onProcessMessage(msg);
-}
-
-void ButtonSet::Item::onSizeHint(ui::SizeHintEvent& ev)
-{
-  gfx::Size iconSize;
-  if (m_icon) {
-    iconSize = m_icon->size();
-    iconSize.w = std::max(iconSize.w, 16*guiscale());
-    iconSize.h = std::max(iconSize.h, 16*guiscale());
-  }
-
-  gfx::Rect boxRc;
-  getTextIconInfo(
-    &boxRc, NULL, NULL,
-    CENTER | (hasText() ? BOTTOM: MIDDLE),
-    iconSize.w, iconSize.h);
-
-  gfx::Size sz = boxRc.size();
-  if (hasText())
-    sz += 8*guiscale();
-
-  Grid::Info info = buttonSet()->getChildInfo(this);
-  if (info.row == info.grid_rows-1)
-    sz.h += 3*guiscale();
-
-  ev.setSizeHint(sz);
 }
 
 void ButtonSet::Item::onClick()
@@ -307,31 +193,63 @@ ButtonSet::ButtonSet(int columns)
   , m_triggerOnMouseUp(false)
   , m_multiMode(MultiMode::One)
 {
-  InitTheme.connect(
-    [this]{
-      noBorderNoChildSpacing();
-    });
+  InitTheme.connect([this] {
+    noBorderNoChildSpacing();
+    // Set default buttonset style if it wasn't already set.
+    if (style() == SkinTheme::instance()->styles.grid()) {
+      setStyle(SkinTheme::instance()->styles.buttonset());
+    }
+  });
   initTheme();
 }
 
-ButtonSet::Item* ButtonSet::addItem(const std::string& text, int hspan, int vspan)
+ButtonSet::Item* ButtonSet::addItem(const std::string& text, ui::Style* style)
+{
+  return addItem(text, 1, 1, style);
+}
+
+ButtonSet::Item* ButtonSet::addItem(const std::string& text, int hspan, int vspan, ui::Style* style)
 {
   Item* item = new Item();
   item->setText(text);
-  addItem(item, hspan, vspan);
+  addItem(item, hspan, vspan, style);
   return item;
 }
 
-ButtonSet::Item* ButtonSet::addItem(const skin::SkinPartPtr& icon, int hspan, int vspan)
+ButtonSet::Item* ButtonSet::addItem(const skin::SkinPartPtr& icon, ui::Style* style)
+{
+  return addItem(icon, 1, 1, style);
+}
+
+ButtonSet::Item* ButtonSet::addItem(const skin::SkinPartPtr& icon,
+                                    int hspan,
+                                    int vspan,
+                                    ui::Style* style)
 {
   Item* item = new Item();
   item->setIcon(icon);
-  addItem(item, hspan, vspan);
+  addItem(item, hspan, vspan, style);
   return item;
 }
-
-ButtonSet::Item* ButtonSet::addItem(Item* item, int hspan, int vspan)
+ButtonSet::Item* ButtonSet::addItem(Item* item, ui::Style* style)
 {
+  return addItem(item, 1, 1, style);
+}
+
+ButtonSet::Item* ButtonSet::addItem(Item* item, int hspan, int vspan, ui::Style* style)
+{
+  item->InitTheme.connect([item, style] {
+    ui::Style* s = style;
+    if (!s) {
+      auto* theme = SkinTheme::get(item);
+      s = theme->styles.buttonsetItemIcon();
+      if (!item->text().empty()) {
+        s = (item->icon() ? theme->styles.buttonsetItemTextTopIconBottom() :
+                            theme->styles.buttonsetItemText());
+      }
+    }
+    item->setStyle(s);
+  });
   addChildInCell(item, hspan, vspan, HORIZONTAL | VERTICAL);
   return item;
 }
@@ -390,15 +308,10 @@ void ButtonSet::onSelectItem(Item* item, bool focusItem, ui::Message* msg)
   const int count = countSelectedItems();
 
   if ((m_multiMode == MultiMode::One) ||
-      (m_multiMode == MultiMode::OneOrMore &&
-       msg &&
-       !msg->shiftPressed() &&
-       !msg->altPressed() &&
-       !msg->ctrlPressed() &&
-       !msg->cmdPressed())) {
+      (m_multiMode == MultiMode::OneOrMore && msg && !msg->shiftPressed() && !msg->altPressed() &&
+       !msg->ctrlPressed() && !msg->cmdPressed())) {
     if (item && item->isSelected() &&
-        ((m_multiMode == MultiMode::One) ||
-         (m_multiMode == MultiMode::OneOrMore && count == 1)))
+        ((m_multiMode == MultiMode::One) || (m_multiMode == MultiMode::OneOrMore && count == 1)))
       return;
 
     if (m_multiMode == MultiMode::One) {
