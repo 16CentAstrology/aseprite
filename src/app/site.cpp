@@ -6,7 +6,7 @@
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/site.h"
@@ -26,12 +26,12 @@ using namespace doc;
 
 Palette* Site::palette()
 {
-  return (m_sprite ? m_sprite->palette(m_frame): nullptr);
+  return (m_sprite ? m_sprite->palette(m_frame) : nullptr);
 }
 
 RgbMap* Site::rgbMap() const
 {
-  return (m_sprite ? m_sprite->rgbMap(m_frame): nullptr);
+  return (m_sprite ? m_sprite->rgbMap(m_frame) : nullptr);
 }
 
 Cel* Site::cel() const
@@ -49,9 +49,12 @@ Image* Site::image(int* x, int* y, int* opacity) const
   if (m_sprite) {
     if (const Cel* cel = this->cel()) {
       image = cel->image();
-      if (x) *x = cel->x();
-      if (y) *y = cel->y();
-      if (opacity) *opacity = std::clamp(cel->opacity(), 0, 255);
+      if (x)
+        *x = cel->x();
+      if (y)
+        *y = cel->y();
+      if (opacity)
+        *opacity = std::clamp(cel->opacity(), 0, 255);
     }
   }
 
@@ -60,7 +63,7 @@ Image* Site::image(int* x, int* y, int* opacity) const
 
 Palette* Site::palette() const
 {
-  return (m_sprite ? m_sprite->palette(m_frame): nullptr);
+  return (m_sprite ? m_sprite->palette(m_frame) : nullptr);
 }
 
 void Site::range(const DocRange& range)
@@ -98,36 +101,37 @@ Grid Site::grid() const
 
 gfx::Rect Site::gridBounds() const
 {
+  gfx::Rect bounds;
   if (m_layer && m_layer->isTilemap()) {
     const Grid& grid = static_cast<LayerTilemap*>(m_layer)->tileset()->grid();
     gfx::Point offset = grid.tileOffset();
     if (const Cel* cel = m_layer->cel(m_frame))
       offset += cel->bounds().origin();
-    return gfx::Rect(offset, grid.tileSize());
+    bounds = gfx::Rect(offset, grid.tileSize());
+    if (!bounds.isEmpty())
+      return bounds;
+  }
+  else {
+    if (m_sprite) {
+      bounds = m_sprite->gridBounds();
+      if (!bounds.isEmpty())
+        return bounds;
+    }
+    if (ui::is_ui_thread()) {
+      bounds = Preferences::instance().document(m_document).grid.bounds();
+      if (!bounds.isEmpty())
+        return bounds;
+    }
   }
 
-  gfx::Rect bounds;
-  if (m_sprite) {
-    bounds = m_sprite->gridBounds();
-    if (!bounds.isEmpty())
-      return bounds;
-  }
-  if (ui::is_ui_thread()) {
-    bounds = Preferences::instance().document(m_document).grid.bounds();
-    if (!bounds.isEmpty())
-      return bounds;
-  }
   return doc::Sprite::DefaultGridBounds();
 }
 
 bool Site::shouldTrimCel(Cel* cel) const
 {
-  return (cel &&
-          cel->layer() &&
-          cel->layer()->isTransparent() &&
+  return (cel && cel->layer() && cel->layer()->isTransparent() &&
           // Don't trim tiles in manual mode
-          !(m_tilemapMode == TilemapMode::Pixels &&
-            m_tilesetMode == TilesetMode::Manual &&
+          !(m_tilemapMode == TilemapMode::Pixels && m_tilesetMode == TilesetMode::Manual &&
             cel->layer()->isTilemap()));
 }
 

@@ -5,7 +5,8 @@
 3. [Header](#header)
 4. [Frames](#frames)
 5. [Chunk Types](#chunk-types)
-6. [File Format Changes](#file-format-changes)
+6. [Notes](#notes)
+7. [File Format Changes](#file-format-changes)
 
 ## References
 
@@ -17,11 +18,24 @@ ASE files use Intel (little-endian) byte order.
 * `DWORD`: A 32-bit unsigned integer value
 * `LONG`: A 32-bit signed integer value
 * `FIXED`: A 32-bit fixed point (16.16) value
+* `FLOAT`: A 32-bit single-precision value
+* `DOUBLE`: A 64-bit double-precision value
+* `QWORD`: A 64-bit unsigned integer value
+* `LONG64`: A 64-bit signed integer value
 * `BYTE[n]`: "n" bytes.
 * `STRING`:
   - `WORD`: string length (number of bytes)
   - `BYTE[length]`: characters (in UTF-8)
   The `'\0'` character is not included.
+* `POINT`:
+  - `LONG`: X coordinate value
+  - `LONG`: Y coordinate value
+* `SIZE`:
+  - `LONG`: Width value
+  - `LONG`: Height value
+* `RECT`:
+  - `POINT`: Origin coordinates
+  - `SIZE`: Rectangle size
 * `PIXEL`: One pixel, depending on the image pixel format:
   - **RGBA**: `BYTE[4]`, each pixel have 4 bytes in this order Red, Green, Blue, Alpha.
   - **Grayscale**: `BYTE[2]`, each pixel have 2 bytes in the order Value, Alpha.
@@ -29,6 +43,7 @@ ASE files use Intel (little-endian) byte order.
 * `TILE`: **Tilemaps**: Each tile can be a 8-bit (`BYTE`), 16-bit
   (`WORD`), or 32-bit (`DWORD`) value and there are masks related to
   the meaning of each bit.
+* `UUID`: A Universally Unique Identifier stored as `BYTE[16]`.
 
 ## Introduction
 
@@ -103,13 +118,20 @@ Then each chunk format is:
     WORD        Chunk type
     BYTE[]      Chunk data
 
+The chunk size includes the DWORD of the size itself, and the WORD of
+the chunk type, so a chunk size must be equal or greater than 6 bytes
+at least.
+
 ## Chunk Types
 
 ### Old palette chunk (0x0004)
 
-Ignore this chunk if you find the new palette chunk (0x2019) Aseprite
-v1.1 saves both chunks 0x0004 and 0x2019 just for backward
-compatibility.
+Ignore this chunk if you find the new palette chunk (0x2019). Aseprite
+v1.1 saves both chunks (0x0004 and 0x2019) just for backward
+compatibility. Aseprite v1.3.5 writes this chunk if the palette
+doesn't have alpha channel and contains 256 colors or less (because
+this chunk is smaller), in other case the new palette chunk (0x2019)
+will be used (and the old one is not saved anymore).
 
     WORD        Number of packets
     + For each packet
@@ -135,8 +157,8 @@ Ignore this chunk if you find the new palette chunk (0x2019)
 
 ### Layer Chunk (0x2004)
 
-  In the first frame should be a set of layer chunks to determine the
-  entire layers layout:
+In the first frame should be a set of layer chunks to determine the
+entire layers layout:
 
     WORD        Flags:
                   1 = Visible
@@ -193,7 +215,11 @@ This chunk determine where to put a cel in the specified layer/frame.
                 1 - Linked Cel
                 2 - Compressed Image
                 3 - Compressed Tilemap
-    BYTE[7]     For future (set to zero)
+    SHORT       Z-Index (see NOTE.5)
+                0 = default layer ordering
+                +N = show this cel N layers later
+                -N = show this cel N layers back
+    BYTE[5]     For future (set to zero)
     + For cel type = 0 (Raw Image Data)
       WORD      Width in pixels
       WORD      Height in pixels
@@ -204,7 +230,7 @@ This chunk determine where to put a cel in the specified layer/frame.
     + For cel type = 2 (Compressed Image)
       WORD      Width in pixels
       WORD      Height in pixels
-      BYTE[]    "Raw Cel" data compressed with ZLIB method (see NOTE.3)
+      PIXEL[]   "Raw Cel" data compressed with ZLIB method (see NOTE.3)
     + For cel type = 3 (Compressed Tilemap)
       WORD      Width in number of tiles
       WORD      Height in number of tiles
@@ -212,7 +238,7 @@ This chunk determine where to put a cel in the specified layer/frame.
       DWORD     Bitmask for tile ID (e.g. 0x1fffffff for 32-bit tiles)
       DWORD     Bitmask for X flip
       DWORD     Bitmask for Y flip
-      DWORD     Bitmask for 90CW rotation
+      DWORD     Bitmask for diagonal flip (swap X/Y axis)
       BYTE[10]  Reserved
       TILE[]    Row by row, from top to bottom tile by tile
                 compressed with ZLIB method (see NOTE.3)
@@ -251,15 +277,20 @@ Color profile for RGB or grayscale values.
 
 ### External Files Chunk (0x2008)
 
-A list of external files linked with this file. It might be used to
-reference external palettes or tilesets.
+A list of external files linked with this file can be found in the first frame. It might be used to
+reference external palettes, tilesets, or extensions that make use of extended properties.
 
     DWORD       Number of entries
     BYTE[8]     Reserved (set to zero)
     + For each entry
-      DWORD     Entry ID (this ID is referenced by tilesets or palettes)
-      BYTE[8]   Reserved (set to zero)
-      STRING    External file name
+      DWORD     Entry ID (this ID is referenced by tilesets, palettes, or extended properties)
+      BYTE      Type
+                  0 - External palette
+                  1 - External tileset
+                  2 - Extension name for properties
+                  3 - Extension name for tile management (can exist one per sprite)
+      BYTE[7]   Reserved (set to zero)
+      STRING    External file name or extension ID (see NOTE.4)
 
 ### Mask Chunk (0x2016) DEPRECATED
 
@@ -326,18 +357,30 @@ for each tag.
 
 ### User Data Chunk (0x2020)
 
-Insert this user data in the last read chunk.  E.g. If we've read a
-layer, this user data belongs to that layer, if we've read a cel, it
-belongs to that cel, etc. There are some special cases: After a Tags
-chunk, there will be several user data fields, one for each tag, you
-should associate the user data in the same order as the tags are in
-the Tags chunk.
-In version 1.3 a sprite has associated user data, to consider this case
-there is an User Data Chunk at the first frame after the Palette Chunk.
+Specifies the user data (color/text/properties) to be associated with
+the last read chunk/object. E.g. If the last chunk we've read is a
+layer and then this chunk appears, this user data belongs to that
+layer, if we've read a cel, it belongs to that cel, etc. There are
+some special cases:
+
+1. After a Tags chunk, there will be several user data chunks, one for
+   each tag, you should associate the user data in the same order as
+   the tags are in the Tags chunk.
+2. After the Tileset chunk, it could be followed by a user data chunk
+   (empty or not) and then all the user data chunks of the tiles
+   ordered by tile index, or it could be followed by none user data
+   chunk (if the file was created in an older Aseprite version of if
+   no tile has user data).
+3. In Aseprite v1.3 a sprite has associated user data, to consider
+   this case there is an User Data Chunk at the first frame after the
+   Palette Chunk.
+
+The data of this chunk is as follows:
 
     DWORD       Flags
                   1 = Has text
                   2 = Has color
+                  4 = Has properties
     + If flags have bit 1
       STRING    Text
     + If flags have bit 2
@@ -345,6 +388,70 @@ there is an User Data Chunk at the first frame after the Palette Chunk.
       BYTE      Color Green (0-255)
       BYTE      Color Blue (0-255)
       BYTE      Color Alpha (0-255)
+    + If flags have bit 4
+      DWORD     Size in bytes of all properties maps stored in this chunk
+                The size includes the this field and the number of property maps
+                (so it will be a value greater or equal to 8 bytes).
+      DWORD     Number of properties maps
+      + For each properties map:
+        DWORD     Properties maps key
+                  == 0 means user properties
+                  != 0 means an extension Entry ID (see External Files Chunk))
+        DWORD     Number of properties
+        + For each property:
+          STRING    Name
+          WORD      Type
+          + If type==0x0001 (bool)
+            BYTE    == 0 means FALSE
+                    != 0 means TRUE
+          + If type==0x0002 (int8)
+            BYTE
+          + If type==0x0003 (uint8)
+            BYTE
+          + If type==0x0004 (int16)
+            SHORT
+          + If type==0x0005 (uint16)
+            WORD
+          + If type==0x0006 (int32)
+            LONG
+          + If type==0x0007 (uint32)
+            DWORD
+          + If type==0x0008 (int64)
+            LONG64
+          + If type==0x0009 (uint64)
+            QWORD
+          + If type==0x000A
+            FIXED
+          + If type==0x000B
+            FLOAT
+          + If type==0x000C
+            DOUBLE
+          + If type==0x000D
+            STRING
+          + If type==0x000E
+            POINT
+          + If type==0x000F
+            SIZE
+          + If type==0x0010
+            RECT
+          + If type==0x0011 (vector)
+            DWORD     Number of elements
+            WORD      Element's type.
+            + If Element's type == 0 (all elements are not of the same type)
+              For each element:
+                WORD      Element's type
+                BYTE[]    Element's value. Structure depends on the
+                          element's type
+            + Else (all elements are of the same type)
+              For each element:
+                BYTE[]    Element's value. Structure depends on the
+                          element's type
+          + If type==0x0012 (nested properties map)
+            DWORD     Number of properties
+            BYTE[]    Nested properties data
+                      Structure is the same as indicated in this loop
+          + If type==0x0013
+            UUID
 
 ### Slice Chunk (0x2022)
 
@@ -381,6 +488,11 @@ there is an User Data Chunk at the first frame after the Palette Chunk.
                       (this is the new format). In rare cases this bit is off,
                       and the empty tile will be equal to 0xffffffff (used in
                       internal versions of Aseprite)
+                  8 - Aseprite will try to match modified tiles with their X
+                      flipped version automatically in Auto mode when using
+                      this tileset.
+                  16 - Same for Y flips
+                  32 - Same for D(iagonal) flips
     DWORD       Number of tiles
     WORD        Tile Width
     WORD        Tile Height
@@ -397,13 +509,13 @@ there is an User Data Chunk at the first frame after the Palette Chunk.
                 of the the External Files Chunk.
       DWORD     Tileset ID in the external file
     + If flag 2 is set
-      DWORD     Compressed data length
+      DWORD     Data length of the compressed Tileset image
       PIXEL[]   Compressed Tileset image (see NOTE.3):
                   (Tile Width) x (Tile Height x Number of Tiles)
 
-### Notes
+## Notes
 
-#### NOTE.1
+### NOTE.1
 
 The child level is used to show the relationship of this layer with
 the last one read, for example:
@@ -417,10 +529,11 @@ the last one read, for example:
       |  `- Layer2                2
       `- Layer3                   1
 
-#### NOTE.2
+### NOTE.2
 
-The layer index is a number to identify any layer in the sprite, for
-example:
+The layer index is a number to identify a layer in the sprite. Layers
+are numbered in the same order as Layer Chunks (0x2004) appear in the
+file, for example:
 
     Layer name and hierarchy      Layer index
     -----------------------------------------------
@@ -431,14 +544,70 @@ example:
       |  `- Layer2                4
       `- Layer3                   5
 
-#### NOTE.3
+It means that in the file you will find the `Background` layer chunk
+first, then the `Layer1` layer chunk, etc.
 
-Details about the ZLIB and DEFLATE compression methods:
+### NOTE.3
+
+**Uncompressed Image**: Uncompressed ("raw") images inside `.aseprite`
+files are saved row by row from top to bottom, and for each
+row/scanline, pixels are from left to right. Each pixel is a `PIXEL`
+(or a `TILE` in the case of tilemaps) as defined in the
+[References](#references) section (so the number and order of bytes
+depends on the color mode of the image/sprite, or the tile
+format). Generally you'll not find uncompressed images in `.aseprite`
+files (only in very old `.aseprite` files).
+
+**Compressed Image**: When an image is compressed (the regular case
+that you will find in `.aseprite` files), the data is a stream of
+bytes in exactly the same *"Uncompressed Image"* format as described
+above, but compressed using the ZLIB method. Details about the ZLIB
+and DEFLATE compression methods can be found here:
 
 * https://www.ietf.org/rfc/rfc1950
 * https://www.ietf.org/rfc/rfc1951
 * Some extra notes that might help you to decode the data:
   http://george.chiramattel.com/blog/2007/09/deflatestream-block-length-does-not-match.html
+
+### NOTE.4
+
+The extension ID must be a string like `publisher/ExtensionName`, for
+example, the [Aseprite Attachment System](https://github.com/aseprite/Attachment-System)
+uses `aseprite/Attachment-System`.
+
+This string will be used in a future to automatically link to the
+extension URL in the [Aseprite Store](https://github.com/aseprite/aseprite/issues/1928).
+
+### NOTE.5
+
+In case that you read and render an `.aseprite` file in your game
+engine/software, you are going to need to process the z-index field
+for each cel with a specific algorithm. This is a possible C++ code
+about how to order layers for a specific frame (the `zIndex` must be
+set depending on the active frame/cel):
+
+```c++
+struct Layer {
+  int layerIndex; // See the "layer index" in NOTE.2
+  int zIndex;     // The z-index value for a specific cel in this layer/frame
+
+  int order() const {
+    return layerIndex + zIndex;
+  }
+
+  // Function to order with std::sort() by operator<(),
+  // which establish the render order from back to front.
+  bool operator<(const Layer& b) const {
+    return (order() < b.order()) ||
+           (order() == b.order() && (zIndex < b.zIndex));
+  }
+};
+```
+
+Basically we first compare `layerIndex + zIndex` of each cel, and then
+if this value is the same, we compare the specific `zIndex` value to
+disambiguate some scenarios. An example of this implementation can be
+found in the [RenderPlan code](https://github.com/aseprite/aseprite/blob/8e91d22b704d6d1e95e1482544318cee9f166c4d/src/doc/render_plan.cpp#L77).
 
 ## File Format Changes
 

@@ -1,12 +1,12 @@
 // Aseprite Document Library
-// Copyright (c) 2019-2020 Igara Studio S.A.
+// Copyright (c) 2019-2024 Igara Studio S.A.
 // Copyright (c) 2001-2016 David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "doc/cel.h"
@@ -38,22 +38,22 @@ Cel::Cel(frame_t frame, const CelDataRef& celData)
 }
 
 // static
-Cel* Cel::MakeCopy(const frame_t newFrame,
-                   const Cel* other)
+Cel* Cel::MakeCopy(const frame_t newFrame, const Cel* other)
 {
-  Cel* cel = new Cel(newFrame,
-                     ImageRef(Image::createCopy(other->image())));
+  Cel* cel = new Cel(newFrame, ImageRef(Image::createCopy(other->image())));
 
   cel->setPosition(other->position());
   cel->setOpacity(other->opacity());
+  cel->copyNonsharedPropertiesFrom(other);
   return cel;
 }
 
 // static
-Cel* Cel::MakeLink(const frame_t newFrame,
-                   const Cel* other)
+Cel* Cel::MakeLink(const frame_t newFrame, const Cel* other)
 {
-  return new Cel(newFrame, other->dataRef());
+  Cel* cel = new Cel(newFrame, other->dataRef());
+  cel->copyNonsharedPropertiesFrom(other);
+  return cel;
 }
 
 void Cel::setFrame(frame_t frame)
@@ -93,6 +93,11 @@ void Cel::setOpacity(int opacity)
   m_data->setOpacity(opacity);
 }
 
+void Cel::setZIndex(int zindex)
+{
+  m_zIndex = zindex;
+}
+
 Document* Cel::document() const
 {
   ASSERT(m_layer);
@@ -118,7 +123,7 @@ Cel* Cel::link() const
     return NULL;
 
   if (!m_data.unique()) {
-    for (frame_t fr=0; fr<m_frame; ++fr) {
+    for (frame_t fr = 0; fr < m_frame; ++fr) {
       Cel* possible = m_layer->cel(fr);
       if (possible && possible->dataRef().get() == m_data.get())
         return possible;
@@ -133,7 +138,7 @@ std::size_t Cel::links() const
   std::size_t links = 0;
 
   Sprite* sprite = this->sprite();
-  for (frame_t fr=0; fr<sprite->totalFrames(); ++fr) {
+  for (frame_t fr = 0; fr < sprite->totalFrames(); ++fr) {
     Cel* cel = m_layer->cel(fr);
     if (cel && cel != this && cel->dataRef().get() == m_data.get())
       ++links;
@@ -162,12 +167,17 @@ Grid Cel::grid() const
   return Grid();
 }
 
+void Cel::copyNonsharedPropertiesFrom(const Cel* fromCel)
+{
+  setZIndex(fromCel->zIndex());
+}
+
 void Cel::fixupImage()
 {
   // Change the mask color to the sprite mask color
   if (m_layer && image()) {
-    image()->setMaskColor((image()->pixelFormat() == IMAGE_TILEMAP) ?
-                            notile : m_layer->sprite()->transparentColor());
+    image()->setMaskColor(
+      (image()->pixelFormat() == IMAGE_TILEMAP) ? notile : m_layer->sprite()->transparentColor());
     ASSERT(m_data);
     m_data->adjustBounds(m_layer);
   }

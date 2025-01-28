@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2019-2022  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app_menus.h"
@@ -35,35 +35,36 @@
 #include "ui/ui.h"
 #include "ver/info.h"
 
-#include "tinyxml.h"
+#include "tinyxml2.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <string>
-#include <algorithm>
-#include <cstdlib>
 
 #define MENUS_TRACE(...) // TRACEARGS
 
 namespace app {
 
+using namespace tinyxml2;
 using namespace ui;
 
 namespace {
 
 // TODO Move this to "os" layer
-const int kUnicodeEsc      = 27;
-const int kUnicodeEnter    = '\r'; // 10
-const int kUnicodeInsert   = 0xF727; // NSInsertFunctionKey
-const int kUnicodeDel      = 0xF728; // NSDeleteFunctionKey
-const int kUnicodeHome     = 0xF729; // NSHomeFunctionKey
-const int kUnicodeEnd      = 0xF72B; // NSEndFunctionKey
-const int kUnicodePageUp   = 0xF72C; // NSPageUpFunctionKey
+const int kUnicodeEsc = 27;
+const int kUnicodeEnter = '\r';      // 10
+const int kUnicodeInsert = 0xF727;   // NSInsertFunctionKey
+const int kUnicodeDel = 0xF728;      // NSDeleteFunctionKey
+const int kUnicodeHome = 0xF729;     // NSHomeFunctionKey
+const int kUnicodeEnd = 0xF72B;      // NSEndFunctionKey
+const int kUnicodePageUp = 0xF72C;   // NSPageUpFunctionKey
 const int kUnicodePageDown = 0xF72D; // NSPageDownFunctionKey
-const int kUnicodeLeft     = 0xF702; // NSLeftArrowFunctionKey
-const int kUnicodeRight    = 0xF703; // NSRightArrowFunctionKey
-const int kUnicodeUp       = 0xF700; // NSUpArrowFunctionKey
-const int kUnicodeDown     = 0xF701; // NSDownArrowFunctionKey
+const int kUnicodeLeft = 0xF702;     // NSLeftArrowFunctionKey
+const int kUnicodeRight = 0xF703;    // NSRightArrowFunctionKey
+const int kUnicodeUp = 0xF700;       // NSUpArrowFunctionKey
+const int kUnicodeDown = 0xF701;     // NSDownArrowFunctionKey
 
 const char* kFileRecentListGroup = "file_recent_list";
 
@@ -79,22 +80,12 @@ bool is_text_entry_shortcut(const os::Shortcut& shortcut)
   const int lchr = std::tolower(chr);
 
   bool result =
-    ((mod == os::KeyModifiers::kKeyNoneModifier ||
-      mod == os::KeyModifiers::kKeyShiftModifier) &&
-     chr >= 32 && chr < 0xF000)
-  ||
-    ((mod == os::KeyModifiers::kKeyCmdModifier ||
-      mod == os::KeyModifiers::kKeyCtrlModifier) &&
-     (lchr == 'a' || lchr == 'c' || lchr == 'v' || lchr == 'x'))
-  ||
-    (chr == kUnicodeInsert ||
-     chr == kUnicodeDel ||
-     chr == kUnicodeHome ||
-     chr == kUnicodeEnd ||
-     chr == kUnicodeLeft ||
-     chr == kUnicodeRight ||
-     chr == kUnicodeEsc ||
-     chr == kUnicodeEnter);
+    ((mod == os::KeyModifiers::kKeyNoneModifier || mod == os::KeyModifiers::kKeyShiftModifier) &&
+     chr >= 32 && chr < 0xF000) ||
+    ((mod == os::KeyModifiers::kKeyCmdModifier || mod == os::KeyModifiers::kKeyCtrlModifier) &&
+     (lchr == 'a' || lchr == 'c' || lchr == 'v' || lchr == 'x')) ||
+    (chr == kUnicodeInsert || chr == kUnicodeDel || chr == kUnicodeHome || chr == kUnicodeEnd ||
+     chr == kUnicodeLeft || chr == kUnicodeRight || chr == kUnicodeEsc || chr == kUnicodeEnter);
 
   return result;
 }
@@ -124,8 +115,7 @@ bool can_call_global_shortcut(const AppMenuItem::Native* native)
     // prefer text input, so we cannot call shortcuts without
     // modifiers (e.g. F or T keystrokes) to trigger a global command
     // in a text field.
-    (focus == nullptr ||
-     focus->type() != ui::kEntryWidget ||
+    (focus == nullptr || focus->type() != ui::kEntryWidget ||
      !is_text_entry_shortcut(native->shortcut)) &&
     (native->keyContext == KeyContext::Any ||
      native->keyContext == KeyboardShortcuts::instance()->getCurrentKeyContext());
@@ -136,133 +126,133 @@ bool can_call_global_shortcut(const AppMenuItem::Native* native)
 int from_scancode_to_unicode(KeyScancode scancode)
 {
   static int map[] = {
-    0, // kKeyNil
-    'a', // kKeyA
-    'b', // kKeyB
-    'c', // kKeyC
-    'd', // kKeyD
-    'e', // kKeyE
-    'f', // kKeyF
-    'g', // kKeyG
-    'h', // kKeyH
-    'i', // kKeyI
-    'j', // kKeyJ
-    'k', // kKeyK
-    'l', // kKeyL
-    'm', // kKeyM
-    'n', // kKeyN
-    'o', // kKeyO
-    'p', // kKeyP
-    'q', // kKeyQ
-    'r', // kKeyR
-    's', // kKeyS
-    't', // kKeyT
-    'u', // kKeyU
-    'v', // kKeyV
-    'w', // kKeyW
-    'x', // kKeyX
-    'y', // kKeyY
-    'z', // kKeyZ
-    '0', // kKey0
-    '1', // kKey1
-    '2', // kKey2
-    '3', // kKey3
-    '4', // kKey4
-    '5', // kKey5
-    '6', // kKey6
-    '7', // kKey7
-    '8', // kKey8
-    '9', // kKey9
-    0, // kKey0Pad
-    0, // kKey1Pad
-    0, // kKey2Pad
-    0, // kKey3Pad
-    0, // kKey4Pad
-    0, // kKey5Pad
-    0, // kKey6Pad
-    0, // kKey7Pad
-    0, // kKey8Pad
-    0, // kKey9Pad
-    0xF704, // kKeyF1 (NSF1FunctionKey)
-    0xF705, // kKeyF2
-    0xF706, // kKeyF3
-    0xF707, // kKeyF4
-    0xF708, // kKeyF5
-    0xF709, // kKeyF6
-    0xF70A, // kKeyF7
-    0xF70B, // kKeyF8
-    0xF70C, // kKeyF9
-    0xF70D, // kKeyF10
-    0xF70E, // kKeyF11
-    0xF70F, // kKeyF12
-    kUnicodeEsc, // kKeyEsc
-    '~', // kKeyTilde
-    '-', // kKeyMinus
-    '=', // kKeyEquals
-    8, // kKeyBackspace
-    9, // kKeyTab
-    '[', // kKeyOpenbrace
-    ']', // kKeyClosebrace
-    kUnicodeEnter, // kKeyEnter
-    ':', // kKeyColon
-    '\'', // kKeyQuote
-    '\\', // kKeyBackslash
-    0, // kKeyBackslash2
-    ',', // kKeyComma
-    '.', // kKeyStop
-    '/', // kKeySlash
-    ' ', // kKeySpace
-    kUnicodeInsert, // kKeyInsert (NSInsertFunctionKey)
-    kUnicodeDel, // kKeyDel (NSDeleteFunctionKey)
-    kUnicodeHome, // kKeyHome (NSHomeFunctionKey)
-    kUnicodeEnd, // kKeyEnd (NSEndFunctionKey)
-    kUnicodePageUp, // kKeyPageUp (NSPageUpFunctionKey)
+    0,                // kKeyNil
+    'a',              // kKeyA
+    'b',              // kKeyB
+    'c',              // kKeyC
+    'd',              // kKeyD
+    'e',              // kKeyE
+    'f',              // kKeyF
+    'g',              // kKeyG
+    'h',              // kKeyH
+    'i',              // kKeyI
+    'j',              // kKeyJ
+    'k',              // kKeyK
+    'l',              // kKeyL
+    'm',              // kKeyM
+    'n',              // kKeyN
+    'o',              // kKeyO
+    'p',              // kKeyP
+    'q',              // kKeyQ
+    'r',              // kKeyR
+    's',              // kKeyS
+    't',              // kKeyT
+    'u',              // kKeyU
+    'v',              // kKeyV
+    'w',              // kKeyW
+    'x',              // kKeyX
+    'y',              // kKeyY
+    'z',              // kKeyZ
+    '0',              // kKey0
+    '1',              // kKey1
+    '2',              // kKey2
+    '3',              // kKey3
+    '4',              // kKey4
+    '5',              // kKey5
+    '6',              // kKey6
+    '7',              // kKey7
+    '8',              // kKey8
+    '9',              // kKey9
+    0,                // kKey0Pad
+    0,                // kKey1Pad
+    0,                // kKey2Pad
+    0,                // kKey3Pad
+    0,                // kKey4Pad
+    0,                // kKey5Pad
+    0,                // kKey6Pad
+    0,                // kKey7Pad
+    0,                // kKey8Pad
+    0,                // kKey9Pad
+    0xF704,           // kKeyF1 (NSF1FunctionKey)
+    0xF705,           // kKeyF2
+    0xF706,           // kKeyF3
+    0xF707,           // kKeyF4
+    0xF708,           // kKeyF5
+    0xF709,           // kKeyF6
+    0xF70A,           // kKeyF7
+    0xF70B,           // kKeyF8
+    0xF70C,           // kKeyF9
+    0xF70D,           // kKeyF10
+    0xF70E,           // kKeyF11
+    0xF70F,           // kKeyF12
+    kUnicodeEsc,      // kKeyEsc
+    '~',              // kKeyTilde
+    '-',              // kKeyMinus
+    '=',              // kKeyEquals
+    8,                // kKeyBackspace
+    9,                // kKeyTab
+    '[',              // kKeyOpenbrace
+    ']',              // kKeyClosebrace
+    kUnicodeEnter,    // kKeyEnter
+    ':',              // kKeyColon
+    '\'',             // kKeyQuote
+    '\\',             // kKeyBackslash
+    0,                // kKeyBackslash2
+    ',',              // kKeyComma
+    '.',              // kKeyStop
+    '/',              // kKeySlash
+    ' ',              // kKeySpace
+    kUnicodeInsert,   // kKeyInsert (NSInsertFunctionKey)
+    kUnicodeDel,      // kKeyDel (NSDeleteFunctionKey)
+    kUnicodeHome,     // kKeyHome (NSHomeFunctionKey)
+    kUnicodeEnd,      // kKeyEnd (NSEndFunctionKey)
+    kUnicodePageUp,   // kKeyPageUp (NSPageUpFunctionKey)
     kUnicodePageDown, // kKeyPageDown (NSPageDownFunctionKey)
-    kUnicodeLeft, // kKeyLeft (NSLeftArrowFunctionKey)
-    kUnicodeRight, // kKeyRight (NSRightArrowFunctionKey)
-    kUnicodeUp, // kKeyUp (NSUpArrowFunctionKey)
-    kUnicodeDown, // kKeyDown (NSDownArrowFunctionKey)
-    '/', // kKeySlashPad
-    '*', // kKeyAsterisk
-    0, // kKeyMinusPad
-    0, // kKeyPlusPad
-    0, // kKeyDelPad
-    0, // kKeyEnterPad
-    0, // kKeyPrtscr
-    0, // kKeyPause
-    0, // kKeyAbntC1
-    0, // kKeyYen
-    0, // kKeyKana
-    0, // kKeyConvert
-    0, // kKeyNoconvert
-    0, // kKeyAt
-    0, // kKeyCircumflex
-    0, // kKeyColon2
-    0, // kKeyKanji
-    0, // kKeyEqualsPad
-    '`', // kKeyBackquote
-    0, // kKeySemicolon
-    0, // kKeyUnknown1
-    0, // kKeyUnknown2
-    0, // kKeyUnknown3
-    0, // kKeyUnknown4
-    0, // kKeyUnknown5
-    0, // kKeyUnknown6
-    0, // kKeyUnknown7
-    0, // kKeyUnknown8
-    0, // kKeyLShift
-    0, // kKeyRShift
-    0, // kKeyLControl
-    0, // kKeyRControl
-    0, // kKeyAlt
-    0, // kKeyAltGr
-    0, // kKeyLWin
-    0, // kKeyRWin
-    0, // kKeyMenu
-    0, // kKeyCommand
-    0, // kKeyScrLock
-    0, // kKeyNumLock
-    0, // kKeyCapsLock
+    kUnicodeLeft,     // kKeyLeft (NSLeftArrowFunctionKey)
+    kUnicodeRight,    // kKeyRight (NSRightArrowFunctionKey)
+    kUnicodeUp,       // kKeyUp (NSUpArrowFunctionKey)
+    kUnicodeDown,     // kKeyDown (NSDownArrowFunctionKey)
+    '/',              // kKeySlashPad
+    '*',              // kKeyAsterisk
+    0,                // kKeyMinusPad
+    0,                // kKeyPlusPad
+    0,                // kKeyDelPad
+    0,                // kKeyEnterPad
+    0,                // kKeyPrtscr
+    0,                // kKeyPause
+    0,                // kKeyAbntC1
+    0,                // kKeyYen
+    0,                // kKeyKana
+    0,                // kKeyConvert
+    0,                // kKeyNoconvert
+    0,                // kKeyAt
+    0,                // kKeyCircumflex
+    0,                // kKeyColon2
+    0,                // kKeyKanji
+    0,                // kKeyEqualsPad
+    '`',              // kKeyBackquote
+    0,                // kKeySemicolon
+    0,                // kKeyUnknown1
+    0,                // kKeyUnknown2
+    0,                // kKeyUnknown3
+    0,                // kKeyUnknown4
+    0,                // kKeyUnknown5
+    0,                // kKeyUnknown6
+    0,                // kKeyUnknown7
+    0,                // kKeyUnknown8
+    0,                // kKeyLShift
+    0,                // kKeyRShift
+    0,                // kKeyLControl
+    0,                // kKeyRControl
+    0,                // kKeyAlt
+    0,                // kKeyAltGr
+    0,                // kKeyLWin
+    0,                // kKeyRWin
+    0,                // kKeyMenu
+    0,                // kKeyCommand
+    0,                // kKeyScrLock
+    0,                // kKeyNumLock
+    0,                // kKeyCapsLock
   };
   if (scancode >= 0 && scancode < sizeof(map) / sizeof(map[0]))
     return map[scancode];
@@ -270,9 +260,8 @@ int from_scancode_to_unicode(KeyScancode scancode)
     return 0;
 }
 
-AppMenuItem::Native get_native_shortcut_for_command(
-  const char* commandId,
-  const Params& params = Params())
+AppMenuItem::Native get_native_shortcut_for_command(const char* commandId,
+                                                    const Params& params = Params())
 {
   AppMenuItem::Native native;
   KeyPtr key = KeyboardShortcuts::instance()->command(commandId, params);
@@ -281,6 +270,19 @@ AppMenuItem::Native get_native_shortcut_for_command(
     native.keyContext = key->keycontext();
   }
   return native;
+}
+
+void destroy_menu_item(ui::Widget* item)
+{
+  if (item->parent())
+    item->parent()->removeChild(item);
+
+  if (auto appItem = dynamic_cast<AppMenuItem*>(item)) {
+    if (appItem)
+      appItem->disposeNative();
+  }
+
+  item->deferDelete();
 }
 
 } // anonymous namespace
@@ -298,8 +300,7 @@ os::Shortcut get_os_shortcut_from_key(const Key* key)
 #endif
 
     return os::Shortcut(
-      (accel.unicodeChar() ? accel.unicodeChar():
-                             from_scancode_to_unicode(accel.scancode())),
+      (accel.unicodeChar() ? accel.unicodeChar() : from_scancode_to_unicode(accel.scancode())),
       accel.modifiers());
   }
   else
@@ -312,26 +313,23 @@ AppMenus* AppMenus::instance()
   static AppMenus* instance = NULL;
   if (!instance) {
     instance = new AppMenus;
-    App::instance()->Exit.connect([]{ destroy_instance(instance); });
+    App::instance()->Exit.connect([] { destroy_instance(instance); });
   }
   return instance;
 }
 
-AppMenus::AppMenus()
-  : m_recentFilesPlaceholder(nullptr)
-  , m_osMenu(nullptr)
+AppMenus::AppMenus() : m_recentFilesPlaceholder(nullptr), m_osMenu(nullptr)
 {
-  m_recentFilesConn =
-    App::instance()->recentFiles()->Changed.connect(
-      [this]{ rebuildRecentList(); });
+  m_recentFilesConn = App::instance()->recentFiles()->Changed.connect(
+    [this] { rebuildRecentList(); });
 }
 
 void AppMenus::reload()
 {
   MENUS_TRACE("MENUS: AppMenus::reload()");
 
-  XmlDocumentRef doc(GuiXml::instance()->doc());
-  TiXmlHandle handle(doc.get());
+  XMLDocument* doc = GuiXml::instance()->doc();
+  XMLHandle handle(doc);
   const char* path = GuiXml::instance()->filename();
 
   ////////////////////////////////////////
@@ -341,9 +339,12 @@ void AppMenus::reload()
   for (auto& it : m_groups) {
     GroupInfo& group = it.second;
     MENUS_TRACE("MENUS: - groups", it.first, "with", group.items.size(), "item(s)");
-    group.end = nullptr;        // This value will be restored later
+
     for (auto& item : group.items)
-      item->parent()->removeChild(item);
+      group.menu->removeChild(item);
+
+    // These values will be restored later
+    group.end = nullptr;
   }
 
   ////////////////////////////////////////
@@ -365,17 +366,16 @@ void AppMenus::reload()
   m_slicePopupMenu.reset(loadMenuById(handle, "slice_popup_menu"));
   m_palettePopupMenu.reset(loadMenuById(handle, "palette_popup_menu"));
   m_inkPopupMenu.reset(loadMenuById(handle, "ink_popup_menu"));
+  m_newFramePopupMenu.reset(loadMenuById(handle, "new_frame_popup_menu"));
 
   // Add one menu item to run each script from the user scripts/ folder
   {
-    MenuItem* scriptsMenu = dynamic_cast<MenuItem*>(
-      m_rootMenu->findItemById("scripts_menu"));
+    MenuItem* scriptsMenu = dynamic_cast<MenuItem*>(m_rootMenu->findItemById("scripts_menu"));
 #ifdef ENABLE_SCRIPTING
     // Load scripts
     ResourceFinder rf;
-    rf.includeUserDir("scripts/.");
+    rf.includeUserDir("scripts");
     std::string scriptsDir = rf.getFirstOrCreateDefault();
-    scriptsDir = base::get_file_path(scriptsDir);
     if (base::is_directory(scriptsDir)) {
       loadScriptsSubmenu(scriptsMenu->getSubmenu(), scriptsDir, true);
     }
@@ -412,11 +412,13 @@ void AppMenus::reload()
 
   for (auto& it : m_groups) {
     GroupInfo& group = it.second;
-    if (group.end) {
+    if (group.menu) {
       MENUS_TRACE("MENUS: - re-adding group ", it.first, "with", group.items.size(), "item(s)");
 
-      auto menu = group.end->parent();
+      auto menu = group.menu;
       int insertIndex = menu->getChildIndex(group.end);
+      if (insertIndex < 0)
+        insertIndex = -1;
       for (auto& item : group.items) {
         menu->insertChild(++insertIndex, item);
         group.end = item;
@@ -436,9 +438,7 @@ void AppMenus::reload()
 
   LOG("MENU: Loading commands keyboard shortcuts from %s\n", path);
 
-  TiXmlElement* xmlKey = handle
-    .FirstChild("gui")
-    .FirstChild("keyboard").ToElement();
+  XMLElement* xmlKey = handle.FirstChildElement("gui").FirstChildElement("keyboard").ToElement();
 
   // From a fresh start, load the default keys
   KeyboardShortcuts::instance()->clear();
@@ -446,11 +446,9 @@ void AppMenus::reload()
 
   // Load extension-defined keys
   for (const Extension* ext : App::instance()->extensions()) {
-    if (ext->isEnabled() &&
-        ext->hasKeys()) {
+    if (ext->isEnabled() && ext->hasKeys()) {
       for (const auto& kv : ext->keys()) {
-        KeyboardShortcuts::instance()->importFile(
-          kv.second, KeySource::ExtensionDefined);
+        KeyboardShortcuts::instance()->importFile(kv.second, KeySource::ExtensionDefined);
       }
     }
   }
@@ -470,15 +468,12 @@ void AppMenus::reload()
 }
 
 #ifdef ENABLE_SCRIPTING
-void AppMenus::loadScriptsSubmenu(ui::Menu* menu,
-                                  const std::string& dir,
-                                  const bool rootLevel)
+void AppMenus::loadScriptsSubmenu(ui::Menu* menu, const std::string& dir, const bool rootLevel)
 {
   auto files = base::list_files(dir);
-  std::sort(files.begin(), files.end(),
-            [](const std::string& a, const std::string& b) {
-              return base::compare_filenames(a, b) < 0;
-            });
+  std::sort(files.begin(), files.end(), [](const std::string& a, const std::string& b) {
+    return base::compare_filenames(a, b) < 0;
+  });
   int insertPos = 0;
   for (auto fn : files) {
     std::string fullFn = base::join_path(dir, fn);
@@ -491,18 +486,15 @@ void AppMenus::loadScriptsSubmenu(ui::Menu* menu,
       if (base::string_to_lower(base::get_file_extension(fn)) == "lua") {
         Params params;
         params.set("filename", fullFn.c_str());
-        menuitem = new AppMenuItem(
-          base::get_file_title(fn).c_str(),
-          CommandId::RunScript(),
-          params);
+        menuitem =
+          new AppMenuItem(base::get_file_title(fn).c_str(), CommandId::RunScript(), params);
       }
     }
     else if (base::is_directory(fullFn)) {
       Menu* submenu = new Menu();
       loadScriptsSubmenu(submenu, fullFn, false);
 
-      menuitem = new AppMenuItem(
-        base::get_file_title(fn).c_str());
+      menuitem = new AppMenuItem(base::get_file_title(fn).c_str());
       menuitem->setSubmenu(submenu);
     }
     if (menuitem) {
@@ -524,7 +516,8 @@ void AppMenus::initTheme()
 
 bool AppMenus::rebuildRecentList()
 {
-  MENUS_TRACE("MENUS: AppMenus::rebuildRecentList m_recentFilesPlaceholder=", m_recentFilesPlaceholder);
+  MENUS_TRACE("MENUS: AppMenus::rebuildRecentList m_recentFilesPlaceholder=",
+              m_recentFilesPlaceholder);
 
   if (!m_recentFilesPlaceholder)
     return true;
@@ -544,21 +537,15 @@ bool AppMenus::rebuildRecentList()
 
   auto recent = App::instance()->recentFiles();
   base::paths files;
-  files.insert(files.end(),
-               recent->pinnedFiles().begin(),
-               recent->pinnedFiles().end());
-  files.insert(files.end(),
-               recent->recentFiles().begin(),
-               recent->recentFiles().end());
+  files.insert(files.end(), recent->pinnedFiles().begin(), recent->pinnedFiles().end());
+  files.insert(files.end(), recent->recentFiles().begin(), recent->recentFiles().end());
   if (!files.empty()) {
     Params params;
     for (const auto& fn : files) {
       params.set("filename", fn.c_str());
 
       std::unique_ptr<AppMenuItem> menuitem(
-        new AppMenuItem(base::get_file_name(fn).c_str(),
-                        CommandId::OpenFile(),
-                        params));
+        new AppMenuItem(base::get_file_name(fn).c_str(), CommandId::OpenFile(), params));
       menuitem->setIsRecentFileItem(true);
 
       m_recentMenuItems.push_back(menuitem.get());
@@ -566,9 +553,8 @@ bool AppMenus::rebuildRecentList()
     }
   }
   else {
-      std::unique_ptr<AppMenuItem> menuitem(
-        new AppMenuItem(
-          Strings::main_menu_file_no_recent_file()));
+    std::unique_ptr<AppMenuItem> menuitem(
+      new AppMenuItem(Strings::main_menu_file_no_recent_file()));
     menuitem->setIsRecentFileItem(true);
     menuitem->setEnabled(false);
 
@@ -577,10 +563,9 @@ bool AppMenus::rebuildRecentList()
   }
 
   // Sync native menus
-  if (owner->native() &&
-      owner->native()->menuItem) {
+  if (owner->native() && owner->native()->menuItem) {
     auto menus = os::instance()->menus();
-    os::MenuRef osMenu = (menus ? menus->makeMenu(): nullptr);
+    os::MenuRef osMenu = (menus ? menus->makeMenu() : nullptr);
     if (osMenu) {
       createNativeSubmenus(osMenu.get(), menu);
       owner->native()->menuItem->setSubmenu(osMenu);
@@ -590,14 +575,64 @@ bool AppMenus::rebuildRecentList()
   return true;
 }
 
-void AppMenus::addMenuItemIntoGroup(const std::string& groupId,
-                                    std::unique_ptr<MenuItem>&& menuItem)
+Menu* AppMenus::getAnimationMenu()
+{
+  auto menuItem = dynamic_cast<MenuItem*>(m_rootMenu->findItemById("animation_menu"));
+  if (menuItem)
+    return menuItem->getSubmenu();
+  else
+    return nullptr;
+}
+
+void AppMenus::addMenuGroup(const std::string& groupId, MenuItem* menuItem)
 {
   GroupInfo& group = m_groups[groupId];
-  Widget* menu = group.end->parent();
+  ASSERT(group.menu == nullptr);
+  ASSERT(group.end == nullptr);
+  group.menu = menuItem->getSubmenu();
+  group.end = nullptr;
+}
+
+void AppMenus::removeMenuGroup(const std::string& groupId)
+{
+  auto it = m_groups.find(groupId);
+  if (it != m_groups.end()) {
+    GroupInfo& group = it->second;
+
+    ASSERT(group.items.empty()); // To remove a group, the group must be empty
+
+    if (group.menu->getOwnerMenuItem()) {
+      ui::MenuItem* item = group.menu->getOwnerMenuItem();
+      removeMenuItemFromGroup([item](Widget* i) { return item == i; });
+    }
+    m_groups.erase(it);
+  }
+}
+
+void AppMenus::addMenuItemIntoGroup(const std::string& groupId, std::unique_ptr<Widget>&& menuItem)
+{
+  auto it = m_groups.find(groupId);
+  if (it == m_groups.end()) {
+    LOG(ERROR,
+        "MENU: An extension tried to add a command (%s) in a non-existent group (%s)\n",
+        menuItem->text().c_str(),
+        groupId.c_str());
+    menuItem.release();
+    return;
+  }
+
+  GroupInfo& group = it->second;
+  Menu* menu = group.menu;
   ASSERT(menu);
-  int insertIndex = menu->getChildIndex(group.end);
-  menu->insertChild(insertIndex+1, menuItem.get());
+
+  if (group.end) {
+    int insertIndex = menu->getChildIndex(group.end);
+    ASSERT(insertIndex >= 0);
+    menu->insertChild(insertIndex + 1, menuItem.get());
+  }
+  else {
+    menu->addChild(menuItem.get());
+  }
 
   group.end = menuItem.get();
   group.items.push_back(menuItem.get());
@@ -610,18 +645,13 @@ void AppMenus::removeMenuItemFromGroup(Pred pred)
 {
   for (auto& it : m_groups) {
     GroupInfo& group = it.second;
-    for (auto it=group.items.begin(); it != group.items.end(); ) {
+    for (auto it = group.items.begin(); it != group.items.end();) {
       auto& item = *it;
       if (pred(item)) {
         if (item == group.end)
           group.end = group.end->previousSibling();
 
-        item->parent()->removeChild(item);
-        if (auto appItem = dynamic_cast<AppMenuItem*>(item)) {
-          if (appItem)
-            appItem->disposeNative();
-        }
-        item->deferDelete();
+        destroy_menu_item(item);
 
         it = group.items.erase(it);
       }
@@ -634,30 +664,24 @@ void AppMenus::removeMenuItemFromGroup(Pred pred)
 
 void AppMenus::removeMenuItemFromGroup(Command* cmd)
 {
-  removeMenuItemFromGroup(
-    [cmd](Widget* item){
-      auto appMenuItem = dynamic_cast<AppMenuItem*>(item);
-      return (appMenuItem && appMenuItem->getCommand() == cmd);
-    });
+  removeMenuItemFromGroup([cmd](Widget* item) {
+    auto appMenuItem = dynamic_cast<AppMenuItem*>(item);
+    return (appMenuItem && appMenuItem->getCommand() == cmd);
+  });
 }
 
 void AppMenus::removeMenuItemFromGroup(Widget* menuItem)
 {
-  removeMenuItemFromGroup(
-    [menuItem](Widget* item){
-      return (item == menuItem);
-    });
+  removeMenuItemFromGroup([menuItem](Widget* item) { return (item == menuItem); });
 }
 
-Menu* AppMenus::loadMenuById(TiXmlHandle& handle, const char* id)
+Menu* AppMenus::loadMenuById(XMLHandle& handle, const char* id)
 {
   ASSERT(id != NULL);
 
   // <gui><menus><menu>
-  TiXmlElement* xmlMenu = handle
-    .FirstChild("gui")
-    .FirstChild("menus")
-    .FirstChild("menu").ToElement();
+  XMLElement* xmlMenu =
+    handle.FirstChildElement("gui").FirstChildElement("menus").FirstChildElement("menu").ToElement();
   while (xmlMenu) {
     const char* menuId = xmlMenu->Attribute("id");
 
@@ -672,14 +696,14 @@ Menu* AppMenus::loadMenuById(TiXmlHandle& handle, const char* id)
   throw base::Exception("Error loading menu '%s'\nReinstall the application.", id);
 }
 
-Menu* AppMenus::convertXmlelemToMenu(TiXmlElement* elem)
+Menu* AppMenus::convertXmlelemToMenu(XMLElement* elem)
 {
   Menu* menu = new Menu();
   menu->setText(m_xmlTranslator(elem, "text"));
 
-  TiXmlElement* child = elem->FirstChildElement();
+  XMLElement* child = elem->FirstChildElement();
   while (child) {
-    Widget* menuitem = convertXmlelemToMenuitem(child);
+    Widget* menuitem = convertXmlelemToMenuitem(child, menu);
     if (menuitem)
       menu->addChild(menuitem);
     else
@@ -692,10 +716,11 @@ Menu* AppMenus::convertXmlelemToMenu(TiXmlElement* elem)
   return menu;
 }
 
-Widget* AppMenus::convertXmlelemToMenuitem(TiXmlElement* elem)
+Widget* AppMenus::convertXmlelemToMenuitem(XMLElement* elem, Menu* menu)
 {
   const char* id = elem->Attribute("id");
   const char* group = elem->Attribute("group");
+  const char* standard = elem->Attribute("standard");
 
   // is it a <separator>?
   if (strcmp(elem->Value(), "separator") == 0) {
@@ -708,20 +733,20 @@ Widget* AppMenus::convertXmlelemToMenuitem(TiXmlElement* elem)
         m_recentFilesPlaceholder = item;
       }
     }
-    if (group)
+    if (group) {
+      m_groups[group].menu = menu;
       m_groups[group].end = item;
+    }
     return item;
   }
 
-  const char* command_id = elem->Attribute("command");
-  Command* command =
-    command_id ? Commands::instance()->byId(command_id):
-                 nullptr;
+  const char* commandId = elem->Attribute("command");
+  Command* command = (commandId ? Commands::instance()->byId(commandId) : nullptr);
 
   // load params
   Params params;
   if (command) {
-    TiXmlElement* xmlParam = elem->FirstChildElement("param");
+    XMLElement* xmlParam = elem->FirstChildElement("param");
     while (xmlParam) {
       const char* param_name = xmlParam->Attribute("name");
       const char* param_value = xmlParam->Attribute("value");
@@ -734,16 +759,30 @@ Widget* AppMenus::convertXmlelemToMenuitem(TiXmlElement* elem)
   }
 
   // Create the item
-  AppMenuItem* menuitem = new AppMenuItem(m_xmlTranslator(elem, "text"),
-                                          (command ? command->id(): ""),
-                                          params);
+  AppMenuItem* menuitem =
+    new AppMenuItem(m_xmlTranslator(elem, "text"), (command ? command->id() : ""), params);
   if (!menuitem)
     return nullptr;
 
-  if (id) menuitem->setId(id);
-  menuitem->processMnemonicFromText();
-  if (group)
+  // Get menu item text from command friendly name
+  if (command && menuitem->text().empty()) {
+    command->loadParams(params);
+    menuitem->setText(command->friendlyName());
+  }
+  // If the menu item has a specific text, process its mnemonic
+  else {
+    menuitem->processMnemonicFromText();
+  }
+
+  if (id)
+    menuitem->setId(id);
+  if (group) {
+    m_groups[group].menu = menu;
     m_groups[group].end = menuitem;
+  }
+
+  if (standard && strcmp(standard, "edit") == 0)
+    menuitem->setStandardEditMenu();
 
   // Has it a ID?
   if (id) {
@@ -789,8 +828,7 @@ void AppMenus::applyShortcutToMenuitemsWithCommand(Menu* menu,
       const std::string& mi_commandId = menuitem->getCommandId();
       const Params& mi_params = menuitem->getParams();
 
-      if ((base::utf8_icmp(mi_commandId, command->id()) == 0) &&
-          (mi_params == params)) {
+      if ((base::utf8_icmp(mi_commandId, command->id()) == 0) && (mi_params == params)) {
         // Set the keyboard shortcut to be shown in this menu-item
         menuitem->setKey(key);
       }
@@ -835,12 +873,13 @@ void AppMenus::updateMenusList()
   m_menus.push_back(m_slicePopupMenu.get());
   m_menus.push_back(m_palettePopupMenu.get());
   m_menus.push_back(m_inkPopupMenu.get());
+  m_menus.push_back(m_newFramePopupMenu.get());
 }
 
 void AppMenus::createNativeMenus()
 {
   os::Menus* menus = os::instance()->menus();
-  if (!menus)       // This platform doesn't support native menu items
+  if (!menus) // This platform doesn't support native menu items
     return;
 
   // Save a reference to the old menu to avoid destroying it.
@@ -852,26 +891,26 @@ void AppMenus::createNativeMenus()
     os::MenuItemInfo about(fmt::format("About {}", get_app_name()));
     auto native = get_native_shortcut_for_command(CommandId::About());
     about.shortcut = native.shortcut;
-    about.execute = [native]{
+    about.execute = [native] {
       if (can_call_global_shortcut(&native)) {
         Command* cmd = Commands::instance()->byId(CommandId::About());
         UIContext::instance()->executeCommandFromMenuOrShortcut(cmd);
       }
     };
-    about.validate = [native](os::MenuItem* item){
+    about.validate = [native](os::MenuItem* item) {
       item->setEnabled(can_call_global_shortcut(&native));
     };
 
     os::MenuItemInfo preferences("Preferences...");
     native = get_native_shortcut_for_command(CommandId::Options());
     preferences.shortcut = native.shortcut;
-    preferences.execute = [native]{
+    preferences.execute = [native] {
       if (can_call_global_shortcut(&native)) {
         Command* cmd = Commands::instance()->byId(CommandId::Options());
         UIContext::instance()->executeCommandFromMenuOrShortcut(cmd);
       }
     };
-    preferences.validate = [native](os::MenuItem* item){
+    preferences.validate = [native](os::MenuItem* item) {
       item->setEnabled(can_call_global_shortcut(&native));
     };
 
@@ -887,7 +926,8 @@ void AppMenus::createNativeMenus()
     appMenu->addItem(menus->makeMenuItem(preferences));
     appMenu->addItem(menus->makeMenuItem(os::MenuItemInfo(os::MenuItemInfo::Separator)));
     appMenu->addItem(menus->makeMenuItem(hide));
-    appMenu->addItem(menus->makeMenuItem(os::MenuItemInfo("Hide Others", os::MenuItemInfo::HideOthers)));
+    appMenu->addItem(
+      menus->makeMenuItem(os::MenuItemInfo("Hide Others", os::MenuItemInfo::HideOthers)));
     appMenu->addItem(menus->makeMenuItem(os::MenuItemInfo("Show All", os::MenuItemInfo::ShowAll)));
     appMenu->addItem(menus->makeMenuItem(os::MenuItemInfo(os::MenuItemInfo::Separator)));
     appMenu->addItem(menus->makeMenuItem(quit));
@@ -925,7 +965,7 @@ void AppMenus::createNativeMenus()
 
     // We use helpIndex+1 because the first index in m_osMenu is the
     // App menu.
-    m_osMenu->insertItem(helpIndex+1, windowItem);
+    m_osMenu->insertItem(helpIndex + 1, windowItem);
   }
 #endif
 
@@ -934,8 +974,7 @@ void AppMenus::createNativeMenus()
     oldOSMenu.reset();
 }
 
-void AppMenus::createNativeSubmenus(os::Menu* osMenu,
-                                    const ui::Menu* uiMenu)
+void AppMenus::createNativeSubmenus(os::Menu* osMenu, const ui::Menu* uiMenu)
 {
   os::Menus* menus = os::instance()->menus();
 
@@ -948,17 +987,15 @@ void AppMenus::createNativeSubmenus(os::Menu* osMenu,
       info.type = os::MenuItemInfo::Separator;
     }
     else if (child->type() == kMenuItemWidget) {
-      if (appMenuItem &&
-          appMenuItem->getCommand()) {
-        native = get_native_shortcut_for_command(
-          appMenuItem->getCommandId().c_str(),
-          appMenuItem->getParams());
+      if (appMenuItem && appMenuItem->getCommand()) {
+        native = get_native_shortcut_for_command(appMenuItem->getCommandId().c_str(),
+                                                 appMenuItem->getParams());
       }
 
       info.type = os::MenuItemInfo::Normal;
       info.text = child->text();
       info.shortcut = native.shortcut;
-      info.execute = [appMenuItem]{
+      info.execute = [appMenuItem] {
         if (can_call_global_shortcut(appMenuItem->native()))
           appMenuItem->executeClick();
       };
@@ -975,7 +1012,7 @@ void AppMenus::createNativeSubmenus(os::Menu* osMenu,
       };
     }
     else {
-      ASSERT(false);            // Unsupported menu item type
+      ASSERT(false); // Unsupported menu item type
       continue;
     }
 
@@ -985,10 +1022,13 @@ void AppMenus::createNativeSubmenus(os::Menu* osMenu,
       if (appMenuItem) {
         native.menuItem = osItem;
         appMenuItem->setNative(native);
+
+        // Set this menu item as the standard "Edit" item for macOS
+        if (appMenuItem->isStandardEditMenu())
+          osItem->setAsStandardEditMenuItem();
       }
 
-      if (child->type() == ui::kMenuItemWidget &&
-          ((ui::MenuItem*)child)->hasSubmenu()) {
+      if (child->type() == ui::kMenuItemWidget && ((ui::MenuItem*)child)->hasSubmenu()) {
         os::MenuRef osSubmenu = menus->makeMenu();
         createNativeSubmenus(osSubmenu.get(), ((ui::MenuItem*)child)->getSubmenu());
         osItem->setSubmenu(osSubmenu);

@@ -1,4 +1,4 @@
--- Copyright (C) 2019-2020  Igara Studio S.A.
+-- Copyright (C) 2019-2024  Igara Studio S.A.
 -- Copyright (C) 2018  David Capello
 --
 -- This file is released under the terms of the MIT license.
@@ -53,6 +53,66 @@ do -- ExportSpriteSheet
     11,8,11,21,8,11,11,
     11,8,11,21,11,8,11,
     11,8,11,21,11,11,8,
+  })
+
+  local s = Sprite{ fromFile="sprites/4f-index-4x4.aseprite" }
+  app.command.ExportSpriteSheet {
+    type=SpriteSheetType.PACKED,
+    textureFilename="_test_export_spritesheet2.png",
+    borderPadding=1,
+    shapePadding=1,
+    trim=true,
+  }
+  local i = Image{ fromFile="_test_export_spritesheet2.png" }
+  expect_img(i,  {
+    0,0,0,0,0,0,0,
+    0,1,0,2,0,3,0,
+    0,1,0,2,0,3,0,
+    0,1,0,0,0,0,0,
+    0,0,0,4,4,0,0,
+    0,0,0,0,0,0,0,
+  })
+
+  app.sprite = s
+  app.command.ExportSpriteSheet {
+    type=SpriteSheetType.PACKED,
+    textureFilename="_test_export_spritesheet3.png",
+    borderPadding=2,
+    shapePadding=1,
+    innerPadding=1,
+    trim=true,
+  }
+  local i = Image{ fromFile="_test_export_spritesheet3.png" }
+  expect_img(i,  {
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,1, 0,0,0,2, 0,0,0,3, 0,0,0,
+
+    0,0,0,1, 0,0,0,2, 0,0,0,3, 0,0,0,
+    0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+
+    0,0,0,0, 0,0,0,4, 4,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+    0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,
+  })
+
+  local s = Sprite{ fromFile="sprites/groups3abc.aseprite" }
+  local c = app.pixelColor.rgba(75, 105, 47)
+  app.command.ExportSpriteSheet {
+    type=SpriteSheetType.ROWS,
+    textureFilename="_test_export_spritesheet4.png",
+    layer="b/b",
+    trim=true,
+  }
+  local i = Image{ fromFile="_test_export_spritesheet4.png" }
+  expect_img(i,  {
+    c,c,0,
+    c,c,0,
+    c,c,c,
   })
 end
 
@@ -603,4 +663,103 @@ do
   expect_eq(Rectangle(0, 1, 4, 2), c.bounds)
   expect_img(i, { 1, 1, 1, 1,
                   1, 0, 0, 1 })
+end
+
+-- MaskByColor
+do
+  local s = Sprite(5, 5, ColorMode.INDEXED)
+  local c = s.cels[1]
+  local i = c.image
+  array_to_pixels({
+    1, 1, 0, 0, 1,
+    1, 1, 0, 0, 1,
+    1, 0, 0, 0, 1,
+    1, 0, 0, 1, 1,
+    1, 0, 0, 1, 1,
+  }, i)
+
+  app.command.MaskByColor {
+    color = Color{ index=1 },
+    tolerance = 0,
+  }
+  app.fgColor = Color{ index=2 }
+  app.command.Fill()
+
+  expect_img(i, {
+    2, 2, 0, 0, 2,
+    2, 2, 0, 0, 2,
+    2, 0, 0, 0, 2,
+    2, 0, 0, 2, 2,
+    2, 0, 0, 2, 2,
+  })
+
+  -- Subtract from current selection by color
+  app.command.MaskAll {}
+  app.command.MaskByColor {
+    color = Color{ index=2 },
+    tolerance = 0,
+    mode = SelectionMode.SUBTRACT,
+  }
+
+  app.fgColor = Color{ index=3 }
+  app.command.Fill()
+
+  expect_img(i, {
+    2, 2, 3, 3, 2,
+    2, 2, 3, 3, 2,
+    2, 3, 3, 3, 2,
+    2, 3, 3, 2, 2,
+    2, 3, 3, 2, 2,
+  })
+
+  -- Add to current selection by color
+  app.command.MaskByColor {
+    color = Color{ index=2 },
+    tolerance = 0,
+    mode = SelectionMode.ADD,
+  }
+  app.fgColor = Color{ index=4 }
+  app.command.Fill()
+
+  expect_img(i, {
+    4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4,
+    4, 4, 4, 4, 4,
+  })
+
+  -- Reset image for new test
+  array_to_pixels({
+    1, 1, 0, 0, 1,
+    1, 1, 0, 0, 1,
+    1, 0, 0, 0, 1,
+    1, 0, 0, 1, 1,
+    1, 0, 0, 1, 1,
+  }, i)
+
+  -- Select a centered 3x3 square
+  app.command.MaskAll {}
+  app.command.ModifySelection {
+    modifier = 'contract',
+    quantity = 1,
+    brush = 'square'
+  }
+  -- Intersect with current selection by color
+  app.command.MaskByColor {
+    color = Color{ index=1 },
+    tolerance = 0,
+    mode = SelectionMode.INTERSECT,
+  }
+
+  app.fgColor = Color{ index=2 }
+  app.command.Fill()
+
+  expect_img(i, {
+    1, 1, 0, 0, 1,
+    1, 2, 0, 0, 1,
+    1, 0, 0, 0, 1,
+    1, 0, 0, 2, 1,
+    1, 0, 0, 1, 1,
+  })
 end

@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/cmd/set_slice_key.h"
@@ -19,8 +19,7 @@
 #include "doc/slice.h"
 #include "doc/sprite.h"
 
-namespace app {
-namespace script {
+namespace app { namespace script {
 
 using namespace doc;
 
@@ -83,7 +82,7 @@ int Slice_set_name(lua_State* L)
   auto slice = get_docobj<Slice>(L, 1);
   const char* name = lua_tostring(L, 2);
   if (name) {
-    Tx tx;
+    Tx tx(slice->sprite());
     tx(new cmd::SetSliceName(slice, name));
     tx.commit();
   }
@@ -98,7 +97,7 @@ int Slice_set_bounds(lua_State* L)
   if (const SliceKey* srcKey = slice->getByFrame(0))
     key = *srcKey;
   key.setBounds(bounds);
-  Tx tx;
+  Tx tx(slice->sprite());
   tx(new cmd::SetSliceKey(slice, 0, key));
   tx.commit();
   return 0;
@@ -112,7 +111,7 @@ int Slice_set_center(lua_State* L)
   if (const SliceKey* srcKey = slice->getByFrame(0))
     key = *srcKey;
   key.setCenter(center);
-  Tx tx;
+  Tx tx(slice->sprite());
   tx(new cmd::SetSliceKey(slice, 0, key));
   tx.commit();
   return 0;
@@ -126,26 +125,27 @@ int Slice_set_pivot(lua_State* L)
   if (const SliceKey* srcKey = slice->getByFrame(0))
     key = *srcKey;
   key.setPivot(pivot);
-  Tx tx;
+  Tx tx(slice->sprite());
   tx(new cmd::SetSliceKey(slice, 0, key));
   tx.commit();
   return 0;
 }
 
 const luaL_Reg Slice_methods[] = {
-  { "__eq", Slice_eq },
-  { nullptr, nullptr }
+  { "__eq",  Slice_eq },
+  { nullptr, nullptr  }
 };
 
 const Property Slice_properties[] = {
-  { "sprite", Slice_get_sprite, nullptr },
-  { "name", Slice_get_name, Slice_set_name },
-  { "bounds", Slice_get_bounds, Slice_set_bounds },
-  { "center", Slice_get_center, Slice_set_center },
-  { "pivot", Slice_get_pivot, Slice_set_pivot },
-  { "color", UserData_get_color<Slice>, UserData_set_color<Slice> },
-  { "data", UserData_get_text<Slice>, UserData_set_text<Slice> },
-  { nullptr, nullptr, nullptr }
+  { "sprite",     Slice_get_sprite,               nullptr                        },
+  { "name",       Slice_get_name,                 Slice_set_name                 },
+  { "bounds",     Slice_get_bounds,               Slice_set_bounds               },
+  { "center",     Slice_get_center,               Slice_set_center               },
+  { "pivot",      Slice_get_pivot,                Slice_set_pivot                },
+  { "color",      UserData_get_color<Slice>,      UserData_set_color<Slice>      },
+  { "data",       UserData_get_text<Slice>,       UserData_set_text<Slice>       },
+  { "properties", UserData_get_properties<Slice>, UserData_set_properties<Slice> },
+  { nullptr,      nullptr,                        nullptr                        }
 };
 
 } // anonymous namespace
@@ -159,5 +159,4 @@ void register_slice_class(lua_State* L)
   REG_CLASS_PROPERTIES(L, Slice);
 }
 
-} // namespace script
-} // namespace app
+}} // namespace app::script
