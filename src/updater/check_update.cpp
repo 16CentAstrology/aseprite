@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2020  Igara Studio S.A.
+// Copyright (C) 2020-2024  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "updater/check_update.h"
@@ -16,7 +16,7 @@
 #include "net/http_headers.h"
 #include "net/http_request.h"
 #include "net/http_response.h"
-#include "tinyxml.h"
+#include "tinyxml2.h"
 #include "updater/user_agent.h"
 #include "ver/info.h"
 
@@ -26,9 +26,9 @@
 
 namespace updater {
 
-CheckUpdateResponse::CheckUpdateResponse()
-  : m_type(Unknown)
-  , m_waitDays(0.0)
+using namespace tinyxml2;
+
+CheckUpdateResponse::CheckUpdateResponse() : m_type(Unknown), m_waitDays(0.0)
 {
 }
 
@@ -44,11 +44,11 @@ CheckUpdateResponse::CheckUpdateResponse(const std::string& responseBody)
   : m_type(Unknown)
   , m_waitDays(0.0)
 {
-  TiXmlDocument doc;
+  XMLDocument doc;
   doc.Parse(responseBody.c_str());
 
-  TiXmlHandle handle(&doc);
-  TiXmlElement* xmlUpdate = handle.FirstChild("update").ToElement();
+  XMLHandle handle(&doc);
+  XMLElement* xmlUpdate = handle.FirstChildElement("update").ToElement();
   if (!xmlUpdate) {
     // TODO show error?
     return;
@@ -84,11 +84,10 @@ CheckUpdateResponse::CheckUpdateResponse(const std::string& responseBody)
     m_waitDays = base::convert_to<double>(std::string(waitdays_attr));
 }
 
-class CheckUpdate::CheckUpdateImpl
-{
+class CheckUpdate::CheckUpdateImpl {
 public:
-  CheckUpdateImpl() { }
-  ~CheckUpdateImpl() { }
+  CheckUpdateImpl() {}
+  ~CheckUpdateImpl() {}
 
   void abort()
   {
@@ -96,7 +95,9 @@ public:
       m_request->abort();
   }
 
-  bool checkNewVersion(const Uuid& uuid, const std::string& extraParams, CheckUpdateDelegate* delegate)
+  bool checkNewVersion(const Uuid& uuid,
+                       const std::string& extraParams,
+                       CheckUpdateDelegate* delegate)
   {
     std::string url = get_app_update_url();
     if (!uuid.empty()) {
@@ -131,8 +132,7 @@ private:
   std::unique_ptr<net::HttpRequest> m_request;
 };
 
-CheckUpdate::CheckUpdate()
-  : m_impl(new CheckUpdateImpl)
+CheckUpdate::CheckUpdate() : m_impl(new CheckUpdateImpl)
 {
 }
 
@@ -146,7 +146,9 @@ void CheckUpdate::abort()
   m_impl->abort();
 }
 
-bool CheckUpdate::checkNewVersion(const Uuid& uuid, const std::string& extraParams, CheckUpdateDelegate* delegate)
+bool CheckUpdate::checkNewVersion(const Uuid& uuid,
+                                  const std::string& extraParams,
+                                  CheckUpdateDelegate* delegate)
 {
   return m_impl->checkNewVersion(uuid, extraParams, delegate);
 }

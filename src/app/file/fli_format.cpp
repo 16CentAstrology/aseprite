@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/doc.h"
@@ -28,28 +28,20 @@ namespace app {
 using namespace base;
 
 class FliFormat : public FileFormat {
+  const char* onGetName() const override { return "flc"; }
 
-  const char* onGetName() const override {
-    return "flc";
-  }
-
-  void onGetExtensions(base::paths& exts) const override {
+  void onGetExtensions(base::paths& exts) const override
+  {
     exts.push_back("flc");
     exts.push_back("fli");
   }
 
-  dio::FileFormat onGetDioFormat() const override {
-    return dio::FileFormat::FLIC_ANIMATION;
-  }
+  dio::FileFormat onGetDioFormat() const override { return dio::FileFormat::FLIC_ANIMATION; }
 
-  int onGetFlags() const override {
-    return
-      FILE_SUPPORT_LOAD |
-      FILE_SUPPORT_SAVE |
-      FILE_SUPPORT_INDEXED |
-      FILE_SUPPORT_FRAMES |
-      FILE_SUPPORT_PALETTES |
-      FILE_ENCODE_ABSTRACT_IMAGE;
+  int onGetFlags() const override
+  {
+    return FILE_SUPPORT_LOAD | FILE_SUPPORT_SAVE | FILE_SUPPORT_INDEXED | FILE_SUPPORT_FRAMES |
+           FILE_SUPPORT_PALETTES | FILE_ENCODE_ABSTRACT_IMAGE;
   }
 
   bool onLoad(FileOp* fop) override;
@@ -104,12 +96,10 @@ bool FliFormat::onLoad(FileOp* fop)
   flic::Frame fliFrame;
   flic::Colormap oldFliColormap;
   fliFrame.pixels = bmp->getPixelAddress(0, 0);
-  fliFrame.rowstride = IndexedTraits::getRowStrideBytes(bmp->width());
+  fliFrame.rowstride = bmp->rowBytes();
 
   frame_t frame_out = 0;
-  for (frame_t frame_in=0;
-       frame_in<sprite->totalFrames();
-       ++frame_in) {
+  for (frame_t frame_in = 0; frame_in < sprite->totalFrames(); ++frame_in) {
     // Read the frame
     if (!decoder.readFrame(fliFrame)) {
       fop->setError("Error reading frame %d\n", frame_in);
@@ -122,10 +112,10 @@ bool FliFormat::onLoad(FileOp* fop)
       oldFliColormap = fliFrame.colormap;
 
       pal.resize(fliFrame.colormap.size());
-      for (int c=0; c<int(fliFrame.colormap.size()); c++) {
-        pal.setEntry(c, rgba(fliFrame.colormap[c].r,
-                             fliFrame.colormap[c].g,
-                             fliFrame.colormap[c].b, 255));
+      for (int c = 0; c < int(fliFrame.colormap.size()); c++) {
+        pal.setEntry(
+          c,
+          rgba(fliFrame.colormap[c].r, fliFrame.colormap[c].g, fliFrame.colormap[c].b, 255));
       }
       pal.setFrame(frame_out);
       sprite->setPalette(&pal, true);
@@ -134,8 +124,7 @@ bool FliFormat::onLoad(FileOp* fop)
     }
 
     // First frame, or the frame changes
-    if (!prevCel ||
-        (count_diff_between_images(prevCel->image(), bmp.get()))) {
+    if (!prevCel || (count_diff_between_images(prevCel->image(), bmp.get()))) {
       // Add the new frame
       ImageRef image(Image::createCopy(bmp.get()));
       Cel* cel = new Cel(frame_out, image);
@@ -152,12 +141,11 @@ bool FliFormat::onLoad(FileOp* fop)
     }
     // The palette and the image don't change: add duration to the last added frame
     else {
-      sprite->setFrameDuration(
-        frame_out-1, sprite->frameDuration(frame_out-1) + header.speed);
+      sprite->setFrameDuration(frame_out - 1, sprite->frameDuration(frame_out - 1) + header.speed);
     }
 
     if (header.frames > 0)
-      fop->setProgress((float)(frame_in+1) / (float)(header.frames));
+      fop->setProgress((float)(frame_in + 1) / (float)(header.frames));
 
     if (fop->isStop())
       break;
@@ -175,13 +163,12 @@ bool FliFormat::onLoad(FileOp* fop)
 
 #ifdef ENABLE_SAVE
 
-static int get_time_precision(const FileAbstractImage* sprite,
-                              const doc::SelectedFrames& selFrames)
+static int get_time_precision(const FileAbstractImage* sprite, const doc::FramesSequence& framesSeq)
 {
   // Check if all frames have the same duration
   bool constantFrameRate = true;
   frame_t prevFrame = -1;
-  for (frame_t frame : selFrames) {
+  for (frame_t frame : framesSeq) {
     if (prevFrame >= 0) {
       if (sprite->frameDuration(prevFrame) != sprite->frameDuration(frame)) {
         constantFrameRate = false;
@@ -194,7 +181,7 @@ static int get_time_precision(const FileAbstractImage* sprite,
     return sprite->frameDuration(0);
 
   int precision = 1000;
-  for (frame_t frame : selFrames) {
+  for (frame_t frame : framesSeq) {
     int len = sprite->frameDuration(frame);
     while (len / precision == 0)
       precision /= 10;
@@ -206,7 +193,7 @@ static int get_time_precision(const FileAbstractImage* sprite,
 
 bool FliFormat::onSave(FileOp* fop)
 {
-  const FileAbstractImage* sprite = fop->abstractImage();
+  const FileAbstractImage* sprite = fop->abstractImageToSave();
 
   // Open the file to write in binary mode
   FileHandle handle(open_file_with_exception_sync_on_close(fop->filename(), "wb"));
@@ -218,7 +205,7 @@ bool FliFormat::onSave(FileOp* fop)
   header.frames = 0;
   header.width = sprite->width();
   header.height = sprite->height();
-  header.speed = get_time_precision(sprite, fop->roi().selectedFrames());
+  header.speed = get_time_precision(sprite, fop->roi().framesSequence());
   encoder.writeHeader(header);
 
   // Create the bitmaps
@@ -229,13 +216,13 @@ bool FliFormat::onSave(FileOp* fop)
   // Write frame by frame
   flic::Frame fliFrame;
   fliFrame.pixels = bmp->getPixelAddress(0, 0);
-  fliFrame.rowstride = IndexedTraits::getRowStrideBytes(bmp->width());
+  fliFrame.rowstride = bmp->rowBytes();
 
-  auto frame_beg = fop->roi().selectedFrames().begin();
-  auto frame_end = fop->roi().selectedFrames().end();
+  auto frame_beg = fop->roi().framesSequence().begin();
+  auto frame_end = fop->roi().framesSequence().end();
   auto frame_it = frame_beg;
   frame_t nframes = fop->roi().frames();
-  for (frame_t f=0; f<=nframes; ++f, ++frame_it) {
+  for (frame_t f = 0; f <= nframes; ++f, ++frame_it) {
     if (frame_it == frame_end)
       frame_it = frame_beg;
 
@@ -243,7 +230,7 @@ bool FliFormat::onSave(FileOp* fop)
     const Palette* pal = sprite->palette(frame);
     int size = std::min(256, pal->size());
 
-    for (int c=0; c<size; c++) {
+    for (int c = 0; c < size; c++) {
       color_t color = pal->getEntry(c);
       fliFrame.colormap[c].r = rgba_getr(color);
       fliFrame.colormap[c].g = rgba_getg(color);
@@ -251,14 +238,14 @@ bool FliFormat::onSave(FileOp* fop)
     }
 
     // Render the frame in the bitmap
-    sprite->renderFrame(frame, bmp.get());
+    sprite->renderFrame(frame, fop->roi().frameBounds(frame), bmp.get());
 
     // How many times this frame should be written to get the same
     // time that it has in the sprite
     if (f < nframes) {
       int times = sprite->frameDuration(frame) / header.speed;
       times = std::max(1, times);
-      for (int c=0; c<times; c++)
+      for (int c = 0; c < times; c++)
         encoder.writeFrame(fliFrame);
     }
     else {
@@ -266,12 +253,12 @@ bool FliFormat::onSave(FileOp* fop)
     }
 
     // Update progress
-    fop->setProgress((float)(f+1) / (float)(nframes+1));
+    fop->setProgress((float)(f + 1) / (float)(nframes + 1));
   }
 
   return true;
 }
 
-#endif  // ENABLE_SAVE
+#endif // ENABLE_SAVE
 
 } // namespace app

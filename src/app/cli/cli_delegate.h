@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2018-2019  Igara Studio S.A.
+// Copyright (C) 2018-2022  Igara Studio S.A.
 // Copyright (C) 2016-2018  David Capello
 //
 // This program is distributed under the terms of
@@ -13,32 +13,29 @@
 
 namespace app {
 
-  class AppOptions;
-  class Context;
-  class DocExporter;
-  class Params;
-  struct CliOpenFile;
+class AppOptions;
+class Context;
+class DocExporter;
+class Params;
+struct CliOpenFile;
 
-  class CliDelegate {
-  public:
-    virtual ~CliDelegate() { }
-    virtual void showHelp(const AppOptions& options) { }
-    virtual void showVersion() { }
-    virtual void uiMode() { }
-    virtual void shellMode() { }
-    virtual void batchMode() { }
-    virtual void beforeOpenFile(const CliOpenFile& cof) { }
-    virtual void afterOpenFile(const CliOpenFile& cof) { }
-    virtual void saveFile(Context* ctx, const CliOpenFile& cof) { }
-    virtual void loadPalette(Context* ctx, const CliOpenFile& cof, const std::string& filename) { }
-    virtual void exportFiles(Context* ctx, DocExporter& exporter) { }
+class CliDelegate {
+public:
+  virtual ~CliDelegate() {}
+  virtual void showHelp(const AppOptions& options) {}
+  virtual void showVersion() {}
+  virtual void uiMode() {}
+  virtual void shellMode() {}
+  virtual void batchMode() {}
+  virtual void beforeOpenFile(const CliOpenFile& cof) {}
+  virtual void afterOpenFile(const CliOpenFile& cof) {}
+  virtual void saveFile(Context* ctx, const CliOpenFile& cof) {}
+  virtual void loadPalette(Context* ctx, const std::string& filename) {}
+  virtual void exportFiles(Context* ctx, DocExporter& exporter) {}
 #ifdef ENABLE_SCRIPTING
-    virtual int execScript(const std::string& filename,
-                           const Params& params) {
-      return 0;
-    }
+  virtual int execScript(const std::string& filename, const Params& params) { return 0; }
 #endif // ENABLE_SCRIPTING
-  };
+};
 
 } // namespace app
 

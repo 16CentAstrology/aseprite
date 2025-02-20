@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/ui/preview_editor.h"
@@ -14,9 +14,9 @@
 #include "app/app.h"
 #include "app/doc.h"
 #include "app/doc_event.h"
+#include "app/i18n/strings.h"
 #include "app/ini_file.h"
 #include "app/loop_tag.h"
-#include "app/i18n/strings.h"
 #include "app/modules/gui.h"
 #include "app/pref/preferences.h"
 #include "app/ui/editor/editor.h"
@@ -45,21 +45,24 @@ using namespace ui;
 
 class MiniCenterButton : public CheckBox {
 public:
-  MiniCenterButton() : CheckBox("") {
+  MiniCenterButton() : CheckBox("")
+  {
     setDecorative(true);
     setSelected(true);
     initTheme();
   }
 
 protected:
-  void onInitTheme(ui::InitThemeEvent& ev) override {
+  void onInitTheme(ui::InitThemeEvent& ev) override
+  {
     CheckBox::onInitTheme(ev);
 
     auto theme = SkinTheme::get(this);
     setStyle(theme->styles.windowCenterButton());
   }
 
-  void onSetDecorativeWidgetBounds() override {
+  void onSetDecorativeWidgetBounds() override
+  {
     auto theme = SkinTheme::get(this);
     Widget* window = parent();
     gfx::Rect rect(0, 0, 0, 0);
@@ -69,21 +72,18 @@ protected:
 
     rect.w = centerSize.w;
     rect.h = centerSize.h;
-    rect.offset(window->bounds().x2()
-                - theme->styles.windowCloseButton()->margin().width() - closeSize.w
-                - theme->styles.windowPlayButton()->margin().width() - playSize.w
-                - style()->margin().right() - centerSize.w,
+    rect.offset(window->bounds().x2() - theme->styles.windowCloseButton()->margin().width() -
+                  closeSize.w - theme->styles.windowPlayButton()->margin().width() - playSize.w -
+                  style()->margin().right() - centerSize.w,
                 window->bounds().y + style()->margin().top());
 
     setBounds(rect);
   }
 
-  bool onProcessMessage(Message* msg) override {
+  bool onProcessMessage(Message* msg) override
+  {
     switch (msg->type()) {
-
-      case kSetCursorMessage:
-        ui::set_mouse_cursor(kArrowCursor);
-        return true;
+      case kSetCursorMessage: ui::set_mouse_cursor(kArrowCursor); return true;
     }
 
     return CheckBox::onProcessMessage(msg);
@@ -92,7 +92,8 @@ protected:
 
 class MiniPlayButton : public Button {
 public:
-  MiniPlayButton() : Button(""), m_isPlaying(false) {
+  MiniPlayButton() : Button(""), m_isPlaying(false)
+  {
     enableFlags(CTRL_RIGHT_CLICK);
     setDecorative(true);
     initTheme();
@@ -100,7 +101,8 @@ public:
 
   bool isPlaying() const { return m_isPlaying; }
 
-  void setPlaying(bool state) {
+  void setPlaying(bool state)
+  {
     m_isPlaying = state;
     setupIcons();
     invalidate();
@@ -109,19 +111,22 @@ public:
   obs::signal<void()> Popup;
 
 private:
-  void onInitTheme(ui::InitThemeEvent& ev) override {
+  void onInitTheme(ui::InitThemeEvent& ev) override
+  {
     Button::onInitTheme(ev);
     setupIcons();
   }
 
-  void onClick(Event& ev) override {
+  void onClick() override
+  {
     m_isPlaying = !m_isPlaying;
     setupIcons();
 
-    Button::onClick(ev);
+    Button::onClick();
   }
 
-  void onSetDecorativeWidgetBounds() override {
+  void onSetDecorativeWidgetBounds() override
+  {
     auto theme = SkinTheme::get(this);
     Widget* window = parent();
     gfx::Rect rect(0, 0, 0, 0);
@@ -131,22 +136,19 @@ private:
 
     rect.w = playSize.w;
     rect.h = playSize.h;
-    rect.offset(window->bounds().x2()
-                - theme->styles.windowCloseButton()->margin().width() - closeSize.w
-                - style()->margin().right() - playSize.w,
+    rect.offset(window->bounds().x2() - theme->styles.windowCloseButton()->margin().width() -
+                  closeSize.w - style()->margin().right() - playSize.w,
                 window->bounds().y + style()->margin().top());
 
     setBounds(rect);
   }
 
-  bool onProcessMessage(Message* msg) override {
+  bool onProcessMessage(Message* msg) override
+  {
     switch (msg->type()) {
+      case kSetCursorMessage: ui::set_mouse_cursor(kArrowCursor); return true;
 
-      case kSetCursorMessage:
-        ui::set_mouse_cursor(kArrowCursor);
-        return true;
-
-      case kMouseUpMessage: {
+      case kMouseUpMessage:   {
         MouseMessage* mouseMsg = static_cast<MouseMessage*>(msg);
         if (mouseMsg->right()) {
           if (hasCapture()) {
@@ -164,7 +166,8 @@ private:
     return Button::onProcessMessage(msg);
   }
 
-  void setupIcons() {
+  void setupIcons()
+  {
     auto theme = SkinTheme::get(this);
     if (m_isPlaying)
       setStyle(theme->styles.windowStopButton());
@@ -183,15 +186,16 @@ PreviewEditorWindow::PreviewEditorWindow()
   , m_refFrame(0)
   , m_aniSpeed(1.0)
   , m_relatedEditor(nullptr)
+  , m_opening(false)
 {
   setAutoRemap(false);
   setWantFocus(false);
 
   m_isEnabled = get_config_bool("MiniEditor", "Enabled", true);
 
-  m_centerButton->Click.connect([this]{ onCenterClicked(); });
-  m_playButton->Click.connect([this]{ onPlayClicked(); });
-  m_playButton->Popup.connect([this]{ onPopupSpeed(); });
+  m_centerButton->Click.connect([this] { onCenterClicked(); });
+  m_playButton->Click.connect([this] { onPlayClicked(); });
+  m_playButton->Popup.connect([this] { onPopupSpeed(); });
 
   addChild(m_centerButton);
   addChild(m_playButton);
@@ -220,7 +224,6 @@ void PreviewEditorWindow::pressPlayButton()
 bool PreviewEditorWindow::onProcessMessage(ui::Message* msg)
 {
   switch (msg->type()) {
-
     case kOpenMessage: {
       Manager* manager = this->manager();
       Display* mainDisplay = manager->display();
@@ -233,8 +236,10 @@ bool PreviewEditorWindow::onProcessMessage(ui::Message* msg)
       if (get_multiple_displays()) {
         extra *= mainDisplay->scale();
       }
-      defaultBounds.x = mainWindow.x2() - ToolBar::instance()->sizeHint().w - defaultBounds.w - extra;
-      defaultBounds.y = mainWindow.y2() - StatusBar::instance()->sizeHint().h - defaultBounds.h - extra;
+      defaultBounds.x = mainWindow.x2() - ToolBar::instance()->sizeHint().w - defaultBounds.w -
+                        extra;
+      defaultBounds.y = mainWindow.y2() - StatusBar::instance()->sizeHint().h - defaultBounds.h -
+                        extra;
 
       fit_bounds(mainDisplay, this, defaultBounds);
 
@@ -243,10 +248,7 @@ bool PreviewEditorWindow::onProcessMessage(ui::Message* msg)
       break;
     }
 
-    case kCloseMessage:
-      save_window_pos(this, "MiniEditor");
-      break;
-
+    case kCloseMessage: save_window_pos(this, "MiniEditor"); break;
   }
 
   return Window::onProcessMessage(msg);
@@ -261,8 +263,7 @@ void PreviewEditorWindow::onInitTheme(ui::InitThemeEvent& ev)
 void PreviewEditorWindow::onClose(ui::CloseEvent& ev)
 {
   ButtonBase* closeButton = dynamic_cast<ButtonBase*>(ev.getSource());
-  if (closeButton &&
-      closeButton->type() == kWindowCloseButtonWidget) {
+  if (closeButton && closeButton->type() == kWindowCloseButtonWidget) {
     // Here we don't use "setPreviewEnabled" to change the state of
     // "m_isEnabled" because we're coming from a close event of the
     // window.
@@ -292,7 +293,7 @@ bool PreviewEditorWindow::hasDocument() const
 
 DocumentPreferences& PreviewEditorWindow::docPref()
 {
-  Doc* doc = (m_docView ? m_docView->document(): nullptr);
+  Doc* doc = (m_docView ? m_docView->document() : nullptr);
   return Preferences::instance().document(doc);
 }
 
@@ -309,7 +310,7 @@ void PreviewEditorWindow::onCenterClicked()
 
 void PreviewEditorWindow::onPlayClicked()
 {
-  Editor* miniEditor = (m_docView ? m_docView->editor(): nullptr);
+  Editor* miniEditor = (m_docView ? m_docView->editor() : nullptr);
   if (!miniEditor || !miniEditor->document())
     return;
 
@@ -328,27 +329,24 @@ void PreviewEditorWindow::onPlayClicked()
 
 void PreviewEditorWindow::onPopupSpeed()
 {
-  Editor* miniEditor = (m_docView ? m_docView->editor(): nullptr);
+  Editor* miniEditor = (m_docView ? m_docView->editor() : nullptr);
   if (!miniEditor || !miniEditor->document())
     return;
 
-  auto& pref = Preferences::instance();
-
-  miniEditor->showAnimationSpeedMultiplierPopup(
-    pref.preview.playOnce,
-    pref.preview.playAll,
-    pref.preview.playSubtags,
-    false);
+  miniEditor->showAnimationSpeedMultiplierPopup();
   m_aniSpeed = miniEditor->getAnimationSpeedMultiplier();
 }
 
 Editor* PreviewEditorWindow::previewEditor() const
 {
-  return (m_docView ? m_docView->editor(): nullptr);
+  return (m_docView ? m_docView->editor() : nullptr);
 }
 
 void PreviewEditorWindow::updateUsingEditor(Editor* editor)
 {
+  if (m_opening)
+    return;
+
   if (!m_isEnabled || !editor) {
     hideWindow();
     m_relatedEditor = nullptr;
@@ -361,10 +359,13 @@ void PreviewEditorWindow::updateUsingEditor(Editor* editor)
   m_relatedEditor = editor;
 
   Doc* document = editor->document();
-  Editor* miniEditor = (m_docView ? m_docView->editor(): nullptr);
+  Editor* miniEditor = (m_docView ? m_docView->editor() : nullptr);
 
-  if (!isVisible())
+  if (!isVisible()) {
+    m_opening = true;
     openWindow();
+    m_opening = false;
+  }
 
   // Document preferences used to store the preferred zoom/scroll point
   auto& docPref = Preferences::instance().document(document);
@@ -496,13 +497,11 @@ void PreviewEditorWindow::adjustPlayingTag()
   Editor* miniEditor = m_docView->editor();
 
   if (miniEditor->isPlaying()) {
-    doc::Tag* tag = editor
-      ->getCustomizationDelegate()
-      ->getTagProvider()
-      ->getTagByFrame(editor->frame(), true);
+    doc::Tag* tag =
+      editor->getCustomizationDelegate()->getTagProvider()->getTagByFrame(editor->frame(), true);
 
     auto playState = dynamic_cast<PlayState*>(miniEditor->getState().get());
-    doc::Tag* playingTag = (playState ? playState->playingTag(): nullptr);
+    doc::Tag* playingTag = (playState ? playState->playingTag() : nullptr);
 
     if (tag == playingTag)
       return;

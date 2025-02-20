@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/doc.h"
@@ -16,6 +16,7 @@
 #include "app/tools/ink.h"
 #include "app/tools/tool.h"
 #include "base/fs.h"
+#include "base/platform.h"
 #include "doc/sprite.h"
 #include "os/system.h"
 #include "ui/system.h"
@@ -38,8 +39,7 @@ Preferences& Preferences::instance()
   return *singleton;
 }
 
-Preferences::Preferences()
-  : app::gen::GlobalPref("")
+Preferences::Preferences() : app::gen::GlobalPref("")
 {
   ASSERT(!singleton);
   singleton = this;
@@ -52,24 +52,26 @@ Preferences::Preferences()
   // doesn't exist.
   const bool firstTime = (!base::is_file(fn));
 
-  load();
+  // Don't use native dialogs on Linux or macOS 10.11 by default
+#if LAF_MACOS || LAF_LINUX
+  // We've received several bug reports about macOS 10.11 where the
+  // native file selector throws an unknown exception (probably we're
+  // using an API that wasn't yet supported in 10.11). So we disable
+  // the native file selector in this platform.
+  #if LAF_MACOS
+  if (base::get_osx_version() < base::Version(10, 11, 0, 0))
+  #endif
+    experimental.useNativeFileDialog.setDefaultValue(false);
+#endif
 
-  // Create a connection with the default RgbMapAlgorithm preferences
-  // to change the default algorithm in the "doc" layer.
-  quantization.rgbmapAlgorithm.AfterChange.connect(
-    [](const doc::RgbMapAlgorithm& newValue){
-      doc::Sprite::SetDefaultRgbMapAlgorithm(newValue);
-    });
-  doc::Sprite::SetDefaultRgbMapAlgorithm(quantization.rgbmapAlgorithm());
+  load();
 
   // Create a connection with the default document preferences grid
   // bounds to sync the default grid bounds for new sprites in the
   // "doc" layer.
   auto& defPref = document(nullptr);
   defPref.grid.bounds.AfterChange.connect(
-    [](const gfx::Rect& newValue){
-      doc::Sprite::SetDefaultGridBounds(newValue);
-    });
+    [](const gfx::Rect& newValue) { doc::Sprite::SetDefaultGridBounds(newValue); });
   doc::Sprite::SetDefaultGridBounds(defPref.grid.bounds());
 
   // Reset confusing defaults for a new instance of the program.
@@ -82,9 +84,7 @@ Preferences::Preferences()
   // Hide the menu bar depending on:
   // 1. this is the first run of the program
   // 2. the native menu bar is available
-  if (firstTime &&
-      os::instance() &&
-      os::instance()->menus()) {
+  if (firstTime && os::instance() && os::instance()->menus()) {
     general.showMenuBar(false);
   }
 }
@@ -93,7 +93,7 @@ Preferences::~Preferences()
 {
   // Don't save preferences, this must be done by the client of the
   // Preferences instance (the App class).
-  //save();
+  // save();
 
   for (auto& pair : m_tools)
     delete pair.second;
@@ -134,23 +134,28 @@ bool Preferences::isSet(OptionBase& opt) const
 
 ToolPreferences& Preferences::tool(tools::Tool* tool)
 {
-  ASSERT(tool != NULL);
+  std::string id;
 
-  auto it = m_tools.find(tool->getId());
+  // If tool == nullptr it means that the tool's options are shared with all tools.
+  if (tool)
+    id = tool->getId();
+  else
+    id = "shared";
+
+  auto it = m_tools.find(id);
   if (it != m_tools.end()) {
     return *it->second;
   }
   else {
-    std::string section = std::string("tool.") + tool->getId();
+    std::string section = std::string("tool.") + id;
     ToolPreferences* toolPref = new ToolPreferences(section);
 
     // Default size for eraser, blur, etc.
-    if (tool->getInk(0)->isEraser() ||
-        tool->getInk(0)->isEffect()) {
+    if (tool && (tool->getInk(0)->isEraser() || tool->getInk(0)->isEffect())) {
       toolPref->brush.size.setDefaultValue(8);
     }
 
-    m_tools[tool->getId()] = toolPref;
+    m_tools[id] = toolPref;
     toolPref->load();
     return *toolPref;
   }
@@ -177,8 +182,8 @@ DocumentPreferences& Preferences::document(const Doc* doc)
       *docPref = defPref;
 
       // Default values for symmetry
-      docPref->symmetry.xAxis.setValueAndDefault(doc->sprite()->width()/2);
-      docPref->symmetry.yAxis.setValueAndDefault(doc->sprite()->height()/2);
+      docPref->symmetry.xAxis.setValueAndDefault(doc->sprite()->width() / 2);
+      docPref->symmetry.yAxis.setValueAndDefault(doc->sprite()->height() / 2);
     }
 
     // Load specific settings of this document
@@ -210,6 +215,9 @@ void Preferences::resetToolPreferences(tools::Tool* tool)
   del_config_section((section + ".brush").c_str());
   del_config_section((section + ".spray").c_str());
   del_config_section((section + ".floodfill").c_str());
+  del_config_section((section + ".dynamics").c_str());
+  std::string shared = "tool.shared";
+  del_config_section(shared.c_str());
 }
 
 void Preferences::removeDocument(Doc* doc)
@@ -236,7 +244,7 @@ std::string Preferences::docConfigFileName(const Doc* doc)
 
   ResourceFinder rf;
   std::string fn = doc->filename();
-  for (size_t i=0; i<fn.size(); ++i) {
+  for (size_t i = 0; i < fn.size(); ++i) {
     if (fn[i] == ' ' || fn[i] == '/' || fn[i] == '\\' || fn[i] == ':' || fn[i] == '.') {
       fn[i] = '-';
     }

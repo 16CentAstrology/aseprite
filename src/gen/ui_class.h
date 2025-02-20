@@ -1,4 +1,5 @@
 // Aseprite Code Generator
+// Copyright (c) 2024 Igara Studio S.A.
 // Copyright (c) 2014-2016 David Capello
 //
 // This file is released under the terms of the MIT license.
@@ -8,10 +9,10 @@
 #define GEN_UI_CLASS_H_INCLUDED
 #pragma once
 
+#include "tinyxml2.h"
 #include <string>
-#include "tinyxml.h"
 
-void gen_ui_class(TiXmlDocument* doc,
+void gen_ui_class(tinyxml2::XMLDocument* doc,
                   const std::string& inputFn,
                   const std::string& widgetId);
 
