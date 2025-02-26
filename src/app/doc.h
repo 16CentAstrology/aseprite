@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2018-2020  Igara Studio S.A.
+// Copyright (C) 2018-2024  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
@@ -30,241 +30,271 @@
 #include <string>
 
 namespace doc {
-  class Cel;
-  class Layer;
-  class Mask;
-  class Sprite;
-  class Tileset;
-}
+class Cel;
+class Layer;
+class LayerTilemap;
+class Mask;
+class Sprite;
+class Tileset;
+} // namespace doc
 
 namespace gfx {
-  class Region;
+class Region;
 }
 
 namespace app {
 
-  class Context;
-  class DocApi;
-  class DocUndo;
-  class Transaction;
+class Context;
+class DocApi;
+class DocUndo;
+class Transaction;
 
-  using namespace doc;
+using namespace doc;
 
-  enum DuplicateType {
-    DuplicateExactCopy,
-    DuplicateWithFlattenLayers,
+enum DuplicateType {
+  DuplicateExactCopy,
+  DuplicateWithFlattenLayers,
+};
+
+// An application document. It is the class used to contain one file
+// opened and being edited by the user (a sprite).
+class Doc : public doc::Document,
+            public obs::observable<DocObserver> {
+  enum Flags {
+    kAssociatedToFile = 1, // This sprite is associated to a file in the file-system
+    kMaskVisible = 2,      // The mask wasn't hidden by the user
+    kInhibitBackup = 4,    // Inhibit the backup process
+    kFullyBackedUp = 8,    // Full backup was done
+    kReadOnly = 16,        // This document is read-only
   };
 
-  // An application document. It is the class used to contain one file
-  // opened and being edited by the user (a sprite).
-  class Doc : public doc::Document,
-              public obs::observable<DocObserver> {
-    enum Flags {
-      kAssociatedToFile = 1, // This sprite is associated to a file in the file-system
-      kMaskVisible      = 2, // The mask wasn't hidden by the user
-      kInhibitBackup    = 4, // Inhibit the backup process
-      kFullyBackedUp    = 8, // Full backup was done
-    };
-  public:
-    Doc(Sprite* sprite);
-    ~Doc();
+public:
+  using LockResult = base::RWLock::LockResult;
 
-    Context* context() const { return m_ctx; }
-    void setContext(Context* ctx);
+  Doc(Sprite* sprite);
+  ~Doc();
 
-    // Lock/unlock API (RWLock wrapper)
-    bool canWriteLockFromRead() const;
-    bool readLock(int timeout);
-    bool writeLock(int timeout);
-    bool upgradeToWrite(int timeout);
-    void downgradeToRead();
-    void unlock();
+  Context* context() const { return m_ctx; }
+  void setContext(Context* ctx);
 
-    bool weakLock(std::atomic<base::RWLock::WeakLock>* weak_lock_flag);
-    void weakUnlock();
+  // Lock/unlock API (RWLock wrapper)
+  bool canWriteLockFromRead() const;
+  LockResult readLock(int timeout);
+  LockResult writeLock(int timeout);
+  LockResult upgradeToWrite(int timeout);
+  void downgradeToRead(LockResult lockResult);
+  void unlock(LockResult lockResult);
 
-    // Sets active/running transaction.
-    void setTransaction(Transaction* transaction);
-    Transaction* transaction() { return m_transaction; }
+  bool weakLock(std::atomic<base::RWLock::WeakLock>* weak_lock_flag);
+  void weakUnlock();
 
-    // Returns a high-level API: observable and undoable methods.
-    DocApi getApi(Transaction& transaction);
+  // Sets active/running transaction.
+  void setTransaction(Transaction* transaction);
+  Transaction* transaction() { return m_transaction; }
 
-    //////////////////////////////////////////////////////////////////////
-    // Main properties
+  // Returns a high-level API: observable and undoable methods.
+  DocApi getApi(Transaction& transaction);
 
-    const DocUndo* undoHistory() const { return m_undo.get(); }
-    DocUndo* undoHistory() { return m_undo.get(); }
+  //////////////////////////////////////////////////////////////////////
+  // Main properties
 
-    color_t bgColor() const;
-    color_t bgColor(Layer* layer) const;
+  const DocUndo* undoHistory() const { return m_undo.get(); }
+  DocUndo* undoHistory() { return m_undo.get(); }
 
-    os::ColorSpaceRef osColorSpace() const { return m_osColorSpace; }
+  bool isUndoing() const;
 
-    //////////////////////////////////////////////////////////////////////
-    // Notifications
+  color_t bgColor() const;
+  color_t bgColor(Layer* layer) const;
 
-    void notifyGeneralUpdate();
-    void notifyColorSpaceChanged();
-    void notifyPaletteChanged();
-    void notifySpritePixelsModified(Sprite* sprite, const gfx::Region& region, frame_t frame);
-    void notifyExposeSpritePixels(Sprite* sprite, const gfx::Region& region);
-    void notifyLayerMergedDown(Layer* srcLayer, Layer* targetLayer);
-    void notifyCelMoved(Layer* fromLayer, frame_t fromFrame, Layer* toLayer, frame_t toFrame);
-    void notifyCelCopied(Layer* fromLayer, frame_t fromFrame, Layer* toLayer, frame_t toFrame);
-    void notifySelectionChanged();
-    void notifySelectionBoundariesChanged();
-    void notifyTilesetChanged(Tileset* tileset);
-    void notifyLayerGroupCollapseChange(Layer* layer);
+  os::ColorSpaceRef osColorSpace() const { return m_osColorSpace; }
 
-    //////////////////////////////////////////////////////////////////////
-    // File related properties
+  //////////////////////////////////////////////////////////////////////
+  // Modifications with notifications
 
-    bool isModified() const;
-    bool isAssociatedToFile() const;
-    void markAsSaved();
+  // Use this function to change the layer visibility and notify all
+  // DocObservers about this change (e.g. so the Editor can be
+  // invalidated/redrawn, MovingPixelsState can drop pixels, etc.)
+  void setLayerVisibilityWithNotifications(Layer* layer, const bool visible);
 
-    // You can use this to indicate that we've destroyed (or we cannot
-    // trust) the file associated with the document (e.g. when we
-    // cancel a Save operation in the middle). So it's impossible to
-    // back to the saved state using the UndoHistory.
-    void impossibleToBackToSavedState();
+  // Use this function to change the layer editable flag and
+  // notify all DocObservers about this change (e.g. so the Editor
+  // can be invalidated/redrawn, MovingPixelsState can drop pixels,
+  // etc.)
+  void setLayerEditableWithNotifications(Layer* layer, const bool editable);
 
-    // Returns true if it does make sense to create a backup in this
-    // document. For example, it doesn't make sense to create a backup
-    // for an unmodified document.
-    bool needsBackup() const;
+  //////////////////////////////////////////////////////////////////////
+  // Notifications
 
-    // Can be used to avoid creating a backup when the file is in a
-    // unusual temporary state (e.g. when the file is resized to be
-    // exported with other size)
-    bool inhibitBackup() const;
-    void setInhibitBackup(const bool inhibitBackup);
+  void notifyGeneralUpdate();
+  void notifyColorSpaceChanged();
+  void notifyPaletteChanged();
+  void notifySpritePixelsModified(Sprite* sprite, const gfx::Region& region, frame_t frame);
+  void notifyExposeSpritePixels(Sprite* sprite, const gfx::Region& region);
+  void notifyLayerMergedDown(Layer* srcLayer, Layer* targetLayer);
+  void notifyBeforeLayerVisibilityChange(Layer* layer, bool newState);
+  void notifyAfterLayerVisibilityChange(Layer* layer);
+  void notifyBeforeLayerEditableChange(Layer* layer, bool newState);
+  void notifyCelMoved(Layer* fromLayer, frame_t fromFrame, Layer* toLayer, frame_t toFrame);
+  void notifyCelCopied(Layer* fromLayer, frame_t fromFrame, Layer* toLayer, frame_t toFrame);
+  void notifySelectionChanged();
+  void notifySelectionBoundariesChanged();
+  void notifyTilesetChanged(Tileset* tileset);
+  void notifyLayerGroupCollapseChange(Layer* layer);
+  void notifyAfterAddTile(LayerTilemap* layer, frame_t frame, tile_index ti);
 
-    void markAsBackedUp();
-    bool isFullyBackedUp() const;
+  //////////////////////////////////////////////////////////////////////
+  // File related properties
 
-    //////////////////////////////////////////////////////////////////////
-    // Loaded options from file
+  bool isModified() const;
+  bool isAssociatedToFile() const;
+  void markAsSaved();
 
-    void setFormatOptions(const FormatOptionsPtr& format_options);
-    FormatOptionsPtr formatOptions() const { return m_format_options; }
+  // You can use this to indicate that we've destroyed (or we cannot
+  // trust) the file associated with the document (e.g. when we
+  // cancel a Save operation in the middle). So it's impossible to
+  // back to the saved state using the UndoHistory.
+  void impossibleToBackToSavedState();
 
-    //////////////////////////////////////////////////////////////////////
-    // Boundaries
+  // Returns true if it does make sense to create a backup in this
+  // document. For example, it doesn't make sense to create a backup
+  // for an unmodified document.
+  bool needsBackup() const;
 
-    void destroyMaskBoundaries();
-    void generateMaskBoundaries(const Mask* mask = nullptr);
+  // Can be used to avoid creating a backup when the file is in a
+  // unusual temporary state (e.g. when the file is resized to be
+  // exported with other size)
+  bool inhibitBackup() const;
+  void setInhibitBackup(const bool inhibitBackup);
 
-    const MaskBoundaries& maskBoundaries() const {
-      return m_maskBoundaries;
-    }
+  void markAsBackedUp();
+  bool isFullyBackedUp() const;
 
-    MaskBoundaries& maskBoundaries() {
-      return m_maskBoundaries;
-    }
+  // TODO This read-only flag might be confusing because it
+  //      indicates that the file was loaded from an incompatible
+  //      version (future unknown feature) and it's preferable to
+  //      mark the sprite as read-only to avoid overwriting unknown
+  //      data. If in the future we want to add the possibility to
+  //      mark a regular file as read-only, this flag'll need a new
+  //      name.
+  void markAsReadOnly();
+  bool isReadOnly() const;
+  void removeReadOnlyMark();
 
-    bool hasMaskBoundaries() const {
-      return !m_maskBoundaries.isEmpty();
-    }
+  //////////////////////////////////////////////////////////////////////
+  // Loaded options from file
 
-    //////////////////////////////////////////////////////////////////////
-    // Extra Cel (it is used to draw pen preview, pixels in movement, etc.)
+  void setFormatOptions(const FormatOptionsPtr& format_options);
+  FormatOptionsPtr formatOptions() const { return m_format_options; }
 
-    ExtraCelRef extraCel() const { return m_extraCel; }
-    void setExtraCel(const ExtraCelRef& extraCel) { m_extraCel = extraCel; }
+  //////////////////////////////////////////////////////////////////////
+  // Boundaries
 
-    //////////////////////////////////////////////////////////////////////
-    // Mask
+  void destroyMaskBoundaries();
+  void generateMaskBoundaries(const Mask* mask = nullptr);
 
-    // Returns the current mask, it can be empty. The mask could be not
-    // empty but hidden to the user if the setMaskVisible(false) was
-    // used called before.
-    Mask* mask() const { return m_mask.get(); }
+  const MaskBoundaries& maskBoundaries() const { return m_maskBoundaries; }
 
-    // Sets the current mask. The new mask will be visible by default,
-    // so you don't need to call setMaskVisible(true).
-    void setMask(const Mask* mask);
+  MaskBoundaries& maskBoundaries() { return m_maskBoundaries; }
 
-    // Returns true only when the mask is not empty, and was not yet
-    // hidden using setMaskVisible (e.g. when the user "deselect the
-    // mask").
-    bool isMaskVisible() const;
+  bool hasMaskBoundaries() const { return !m_maskBoundaries.isEmpty(); }
 
-    // Changes the visibility state of the mask (it is useful only if
-    // the getMask() is not empty and the user can see that the mask is
-    // being hidden and shown to him).
-    void setMaskVisible(bool visible);
+  //////////////////////////////////////////////////////////////////////
+  // Extra Cel (it is used to draw pen preview, pixels in movement, etc.)
 
-    //////////////////////////////////////////////////////////////////////
-    // Transformation
+  ExtraCelRef extraCel() const { return m_extraCel; }
+  void setExtraCel(const ExtraCelRef& extraCel) { m_extraCel = extraCel; }
 
-    Transformation getTransformation() const;
-    void setTransformation(const Transformation& transform);
-    void resetTransformation();
+  //////////////////////////////////////////////////////////////////////
+  // Mask
 
-    //////////////////////////////////////////////////////////////////////
-    // Last point used to draw straight lines using freehand tools + Shift key
-    // (EditorCustomizationDelegate::isStraightLineFromLastPoint() modifier)
+  // Returns the current mask, it can be empty. The mask could be not
+  // empty but hidden to the user if the setMaskVisible(false) was
+  // used called before.
+  Mask* mask() const { return m_mask.get(); }
 
-    static gfx::Point NoLastDrawingPoint();
-    gfx::Point lastDrawingPoint() const { return m_lastDrawingPoint; }
-    void setLastDrawingPoint(const gfx::Point& pos) { m_lastDrawingPoint = pos; }
+  // Sets the current mask. The new mask will be visible by default,
+  // so you don't need to call setMaskVisible(true).
+  void setMask(const Mask* mask);
 
-    //////////////////////////////////////////////////////////////////////
-    // Copying
+  // Returns true only when the mask is not empty, and was not yet
+  // hidden using setMaskVisible (e.g. when the user "deselect the
+  // mask").
+  bool isMaskVisible() const;
 
-    void copyLayerContent(const Layer* sourceLayer, Doc* destDoc, Layer* destLayer) const;
-    Doc* duplicate(DuplicateType type) const;
+  // Changes the visibility state of the mask (it is useful only if
+  // the getMask() is not empty and the user can see that the mask is
+  // being hidden and shown to him).
+  void setMaskVisible(bool visible);
 
-    void close();
+  //////////////////////////////////////////////////////////////////////
+  // Transformation
 
-  protected:
-    void onFileNameChange() override;
-    virtual void onContextChanged();
+  Transformation getTransformation() const;
+  void setTransformation(const Transformation& transform);
+  void resetTransformation();
 
-  private:
-    void removeFromContext();
-    void updateOSColorSpace(bool appWideSignal);
+  //////////////////////////////////////////////////////////////////////
+  // Last point used to draw straight lines using freehand tools + Shift key
+  // (EditorCustomizationDelegate::isStraightLineFromLastPoint() modifier)
 
-    // The document is in the collection of documents of this context.
-    Context* m_ctx;
+  static gfx::Point NoLastDrawingPoint();
+  gfx::Point lastDrawingPoint() const { return m_lastDrawingPoint; }
+  void setLastDrawingPoint(const gfx::Point& pos) { m_lastDrawingPoint = pos; }
 
-    // Internal states of the document.
-    int m_flags;
+  //////////////////////////////////////////////////////////////////////
+  // Copying
 
-    // Read-Write locks.
-    base::RWLock m_rwLock;
+  void copyLayerContent(const Layer* sourceLayer, Doc* destDoc, Layer* destLayer) const;
+  Doc* duplicate(DuplicateType type) const;
 
-    // Undo and redo information about the document.
-    std::unique_ptr<DocUndo> m_undo;
+  void close();
 
-    // Current transaction for this document (when this is commit(), a
-    // new undo command is added to m_undo).
-    Transaction* m_transaction;
+protected:
+  void onFileNameChange() override;
+  virtual void onContextChanged();
 
-    // Selected mask region boundaries
-    doc::MaskBoundaries m_maskBoundaries;
+private:
+  void removeFromContext();
+  void updateOSColorSpace(bool appWideSignal);
 
-    // Data to save the file in the same format that it was loaded
-    FormatOptionsPtr m_format_options;
+  // The document is in the collection of documents of this context.
+  Context* m_ctx;
 
-    // Extra cel used to draw extra stuff (e.g. editor's pen preview, pixels in movement, etc.)
-    ExtraCelRef m_extraCel;
+  // Internal states of the document.
+  int m_flags;
 
-    // Current mask.
-    std::unique_ptr<doc::Mask> m_mask;
+  // Read-Write locks.
+  base::RWLock m_rwLock;
 
-    // Current transformation.
-    Transformation m_transformation;
+  // Undo and redo information about the document.
+  std::unique_ptr<DocUndo> m_undo;
 
-    gfx::Point m_lastDrawingPoint;
+  // Current transaction for this document (when this is commit(), a
+  // new undo command is added to m_undo).
+  Transaction* m_transaction;
 
-    // Last used color space to render a sprite.
-    os::ColorSpaceRef m_osColorSpace;
+  // Selected mask region boundaries
+  doc::MaskBoundaries m_maskBoundaries;
 
-    DISABLE_COPYING(Doc);
-  };
+  // Data to save the file in the same format that it was loaded
+  FormatOptionsPtr m_format_options;
+
+  // Extra cel used to draw extra stuff (e.g. editor's pen preview, pixels in movement, etc.)
+  ExtraCelRef m_extraCel;
+
+  // Current mask.
+  std::unique_ptr<doc::Mask> m_mask;
+
+  // Current transformation.
+  Transformation m_transformation;
+
+  gfx::Point m_lastDrawingPoint;
+
+  // Last used color space to render a sprite.
+  os::ColorSpaceRef m_osColorSpace;
+
+  DISABLE_COPYING(Doc);
+};
 
 } // namespace app
 

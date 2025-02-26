@@ -5,7 +5,7 @@
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/ui/editor/delayed_mouse_move.h"
@@ -20,8 +20,7 @@ DelayedMouseMove::DelayedMouseMove(DelayedMouseMoveDelegate* delegate,
   : m_delegate(delegate)
   , m_editor(editor)
   , m_timer(interval)
-  , m_spritePos(std::numeric_limits<double>::min(),
-                std::numeric_limits<double>::min())
+  , m_spritePos(std::numeric_limits<double>::min(), std::numeric_limits<double>::min())
 {
   ASSERT(m_delegate);
   m_timer.Tick.connect([this] { commitMouseMove(); });
@@ -71,7 +70,12 @@ void DelayedMouseMove::commitMouseMove()
   if (m_timer.isRunning())
     m_timer.stop();
 
-  m_delegate->onCommitMouseMove(m_editor, spritePos());
+  try {
+    m_delegate->onCommitMouseMove(m_editor, spritePos());
+  }
+  catch (const std::exception& ex) {
+    m_editor->showUnhandledException(ex, nullptr);
+  }
 }
 
 const gfx::PointF& DelayedMouseMove::spritePos() const

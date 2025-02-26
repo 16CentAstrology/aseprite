@@ -1,4 +1,5 @@
 // Aseprite
+// Copyright (C) 2024  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This program is distributed under the terms of
@@ -12,24 +13,25 @@
 
 namespace app {
 
-  class RotateCommand : public Command {
-  public:
-    RotateCommand();
+class RotateCommand : public Command {
+public:
+  RotateCommand();
 
-    bool flipMask() const { return m_flipMask; }
-    int angle() const { return m_angle; }
+  bool flipMask() const { return m_flipMask; }
+  int angle() const { return m_angle; }
 
-  protected:
-    bool onNeedsParams() const override { return true; }
-    void onLoadParams(const Params& params) override;
-    bool onEnabled(Context* context) override;
-    void onExecute(Context* context) override;
-    std::string onGetFriendlyName() const override;
+protected:
+  bool onNeedsParams() const override { return true; }
+  void onLoadParams(const Params& params) override;
+  bool onEnabled(Context* context) override;
+  void onExecute(Context* context) override;
+  std::string onGetFriendlyName() const override;
 
-  private:
-    bool m_flipMask;
-    int m_angle;
-  };
+private:
+  bool m_ui;
+  bool m_flipMask;
+  int m_angle;
+};
 
 } // namespace app
 

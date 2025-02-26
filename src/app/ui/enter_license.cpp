@@ -1,17 +1,17 @@
 // Aseprite
-// Copyright (C) 2021  Igara Studio S.A.
+// Copyright (C) 2021-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
-
 
 #include "app/i18n/strings.h"
 #include "app/resource_finder.h"
 #include "base/fs.h"
+#include "base/thread.h"
 #include "enter_license.h"
 #include "ui/message.h"
 #include "ui/style.h"
@@ -32,10 +32,7 @@ EnterLicense::EnterLicense() : m_timer(500, this), m_activationInProgress(false)
   });
 
   okButton()->setEnabled(false);
-  okButton()->Click.connect([this](ui::Event&) {
-    startActivation();
-  });
-
+  okButton()->Click.connect([this]() { startActivation(); });
 
   m_timer.start();
 }
@@ -49,18 +46,14 @@ void EnterLicense::onBeforeClose(ui::CloseEvent& ev)
 
 void EnterLicense::onActivationFailed(drm::LicenseManager::ActivationException& e)
 {
-  ui::execute_from_ui_thread([this, e]() {
-    showError(e.what());
-  });
+  ui::execute_from_ui_thread([this, e]() { showError(e.what()); });
 }
 
 void EnterLicense::onActivated(std::string token)
 {
   drm::LicenseManager::instance()->saveToken(token);
 
-  ui::execute_from_ui_thread([this]() {
-    showSuccess();
-  });
+  ui::execute_from_ui_thread([this]() { showSuccess(); });
 }
 
 void EnterLicense::startActivation()
@@ -72,6 +65,7 @@ void EnterLicense::startActivation()
   std::string key = licenseKey()->text();
   m_activationInProgress = true;
   m_activation = std::thread([this, key]() {
+    base::this_thread::set_name("activate-key");
     try {
       auto token = drm::LicenseManager::instance()->activate(key);
       onActivated(token);
@@ -81,7 +75,6 @@ void EnterLicense::startActivation()
     }
   });
 }
-
 
 void EnterLicense::showError(const std::string& msg)
 {
@@ -108,4 +101,4 @@ void EnterLicense::showSuccess()
   m_activationInProgress = false;
 }
 
-}
+} // namespace app

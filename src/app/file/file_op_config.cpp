@@ -1,11 +1,11 @@
 // Aseprite
-// Copyright (C) 2019-2021  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/file/file_op_config.h"
@@ -16,13 +16,17 @@ namespace app {
 
 void FileOpConfig::fillFromPreferences()
 {
-  preserveColorProfile = Preferences::instance().color.manage();
-  filesWithProfile = Preferences::instance().color.filesWithProfile();
-  missingProfile = Preferences::instance().color.missingProfile();
-  newBlend = Preferences::instance().experimental.newBlend();
-  defaultSliceColor = Preferences::instance().slices.defaultColor();
+  auto& pref = Preferences::instance();
+
+  preserveColorProfile = pref.color.manage();
+  filesWithProfile = pref.color.filesWithProfile();
+  missingProfile = pref.color.missingProfile();
+  newBlend = pref.experimental.newBlend();
+  defaultSliceColor = pref.slices.defaultColor();
   workingCS = get_working_rgb_space_from_preferences();
-  rgbMapAlgorithm = Preferences::instance().quantization.rgbmapAlgorithm();
+  rgbMapAlgorithm = pref.quantization.rgbmapAlgorithm();
+  fitCriteria = pref.quantization.fitCriteria();
+  cacheCompressedTilesets = pref.tileset.cacheCompressedTilesets();
 }
 
 } // namespace app

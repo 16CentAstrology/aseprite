@@ -8,19 +8,15 @@
 #define UI_PAINT_H_INCLUDED
 #pragma once
 
-#include "base/disable_copying.h"
 #include "gfx/color.h"
 #include "os/paint.h"
 
 namespace ui {
 
-  using os::Paint;
-  using os::BlendMode;
+using os::BlendMode;
+using os::Paint;
 
-  void set_checkered_paint_mode(Paint& paint,
-                                const int param,
-                                const gfx::Color a,
-                                const gfx::Color b);
+void set_checkered_paint_mode(Paint& paint, const int param, const gfx::Color a, const gfx::Color b);
 
 } // namespace ui
 

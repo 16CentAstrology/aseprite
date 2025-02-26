@@ -6,7 +6,7 @@
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
@@ -34,8 +34,7 @@ protected:
   void onExecute(Context* context) override;
 };
 
-NewFrameTagCommand::NewFrameTagCommand()
-  : Command(CommandId::NewFrameTag(), CmdRecordableFlag)
+NewFrameTagCommand::NewFrameTagCommand() : Command(CommandId::NewFrameTag(), CmdRecordableFlag)
 {
 }
 
@@ -53,9 +52,7 @@ void NewFrameTagCommand::onExecute(Context* context)
   frame_t to = reader.frame();
 
   auto range = App::instance()->timeline()->range();
-  if (range.enabled() &&
-      (range.type() == DocRange::kFrames ||
-       range.type() == DocRange::kCels)) {
+  if (range.enabled() && (range.type() == DocRange::kFrames || range.type() == DocRange::kCels)) {
     from = range.selectedFrames().firstFrame();
     to = range.selectedFrames().lastFrame();
   }
@@ -74,7 +71,7 @@ void NewFrameTagCommand::onExecute(Context* context)
 
   {
     ContextWriter writer(reader);
-    Tx tx(writer.context(), friendlyName());
+    Tx tx(writer, friendlyName());
     tx(new cmd::AddTag(writer.sprite(), tag.get()));
     tag.release();
     tx.commit();

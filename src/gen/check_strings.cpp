@@ -1,5 +1,5 @@
 // Aseprite Code Generator
-// Copyright (c) 2021 Igara Studio S.A.
+// Copyright (c) 2021-2024 Igara Studio S.A.
 // Copyright (c) 2016-2018 David Capello
 //
 // This file is released under the terms of the MIT license.
@@ -15,7 +15,7 @@
 #include "cfg/cfg.h"
 #include "gen/common.h"
 
-#include "tinyxml.h"
+#include "tinyxml2.h"
 
 #include <cctype>
 #include <iostream>
@@ -23,11 +23,16 @@
 #include <stdexcept>
 #include <vector>
 
-typedef std::vector<TiXmlElement*> XmlElements;
+// Check only the existence of strings from the main "en.ini" file
+// All other translations will be considered work-in-progress.
+#define ENGLISH_ONLY 1
 
-static std::string find_first_id(TiXmlElement* elem)
+using namespace tinyxml2;
+using XmlElements = std::vector<XMLElement*>;
+
+static std::string find_first_id(XMLElement* elem)
 {
-  TiXmlElement* child = elem->FirstChildElement();
+  XMLElement* child = elem->FirstChildElement();
   while (child) {
     const char* id = child->Attribute("id");
     if (id)
@@ -42,9 +47,9 @@ static std::string find_first_id(TiXmlElement* elem)
   return "";
 }
 
-static void collect_elements_with_strings(TiXmlElement* elem, XmlElements& elems)
+static void collect_elements_with_strings(XMLElement* elem, XmlElements& elems)
 {
-  TiXmlElement* child = elem->FirstChildElement();
+  XMLElement* child = elem->FirstChildElement();
   while (child) {
     const char* text = child->Attribute("text");
     const char* tooltip = child->Attribute("tooltip");
@@ -88,32 +93,34 @@ static bool is_email(const char* p)
 
 class CheckStrings {
 public:
-
-  void loadStrings(const std::string& dir) {
-    for (const auto& fn : base::list_files(dir)) {
+  void loadStrings(const std::string& dir)
+  {
+#if ENGLISH_ONLY
+    std::string fn = "en.ini";
+#else
+    for (const auto& fn : base::list_files(dir))
+#endif
+    {
       std::unique_ptr<cfg::CfgFile> f(new cfg::CfgFile);
       f->load(base::join_path(dir, fn));
       m_stringFiles.push_back(std::move(f));
     }
   }
 
-  void checkStringsOnWidgets(const std::string& dir) {
+  void checkStringsOnWidgets(const std::string& dir)
+  {
     for (const auto& fn : base::list_files(dir)) {
       std::string fullFn = base::join_path(dir, fn);
       base::FileHandle inputFile(base::open_file(fullFn, "rb"));
-      std::unique_ptr<TiXmlDocument> doc(new TiXmlDocument());
-      doc->SetValue(fullFn.c_str());
-      if (!doc->LoadFile(inputFile.get())) {
-        std::cerr << doc->Value() << ":"
-                  << doc->ErrorRow() << ":"
-                  << doc->ErrorCol() << ": "
-                  << "error " << doc->ErrorId() << ": "
-                  << doc->ErrorDesc() << "\n";
+      auto doc = std::make_unique<XMLDocument>();
+      if (doc->LoadFile(inputFile.get()) != XML_SUCCESS) {
+        std::cerr << fullFn << ":" << doc->ErrorLineNum() << ": "
+                  << "error " << int(doc->ErrorID()) << ": " << doc->ErrorStr() << "\n";
 
         throw std::runtime_error("invalid input file");
       }
 
-      TiXmlHandle handle(doc.get());
+      XMLHandle handle(doc.get());
       XmlElements widgets;
 
       const char* warnings = doc->RootElement()->Attribute("i18nwarnings");
@@ -123,66 +130,64 @@ public:
       m_prefixId = find_first_id(doc->RootElement());
 
       collect_elements_with_strings(doc->RootElement(), widgets);
-      for (TiXmlElement* elem : widgets) {
-        checkString(elem, elem->Attribute("text"));
-        checkString(elem, elem->Attribute("tooltip"));
+      for (XMLElement* elem : widgets) {
+        checkString(fullFn, elem, elem->Attribute("text"));
+        checkString(fullFn, elem, elem->Attribute("tooltip"));
       }
     }
   }
 
-  void checkStringsOnGuiFile(const std::string& fullFn) {
+  void checkStringsOnGuiFile(const std::string& fullFn)
+  {
     base::FileHandle inputFile(base::open_file(fullFn, "rb"));
-    std::unique_ptr<TiXmlDocument> doc(new TiXmlDocument());
-    doc->SetValue(fullFn.c_str());
-    if (!doc->LoadFile(inputFile.get())) {
-      std::cerr << doc->Value() << ":"
-                << doc->ErrorRow() << ":"
-                << doc->ErrorCol() << ": "
-                << "error " << doc->ErrorId() << ": "
-                << doc->ErrorDesc() << "\n";
+    auto doc = std::make_unique<XMLDocument>();
+    if (doc->LoadFile(inputFile.get()) != XML_SUCCESS) {
+      std::cerr << fullFn << ":" << doc->ErrorLineNum() << ": "
+                << "error " << int(doc->ErrorID()) << ": " << doc->ErrorStr() << "\n";
 
       throw std::runtime_error("invalid input file");
     }
 
-    TiXmlHandle handle(doc.get());
+    XMLHandle handle(doc.get());
 
     // For each menu
-    TiXmlElement* xmlMenu = handle
-      .FirstChild("gui")
-      .FirstChild("menus")
-      .FirstChild("menu").ToElement();
+    XMLElement* xmlMenu = handle.FirstChildElement("gui")
+                            .FirstChildElement("menus")
+                            .FirstChildElement("menu")
+                            .ToElement();
     while (xmlMenu) {
       const char* menuId = xmlMenu->Attribute("id");
       if (menuId) {
         m_prefixId = menuId;
         XmlElements menus;
         collect_elements_with_strings(xmlMenu, menus);
-        for (TiXmlElement* elem : menus)
-          checkString(elem, elem->Attribute("text"));
+        for (XMLElement* elem : menus)
+          checkString(fullFn, elem, elem->Attribute("text"));
       }
       xmlMenu = xmlMenu->NextSiblingElement();
     }
 
     // For each tool
     m_prefixId = "tools";
-    TiXmlElement* xmlGroup = handle
-      .FirstChild("gui")
-      .FirstChild("tools")
-      .FirstChild("group").ToElement();
+    XMLElement* xmlGroup = handle.FirstChildElement("gui")
+                             .FirstChildElement("tools")
+                             .FirstChildElement("group")
+                             .ToElement();
     while (xmlGroup) {
       XmlElements tools;
       collect_elements_with_strings(xmlGroup, tools);
-      for (TiXmlElement* elem : tools) {
-        checkString(elem, elem->Attribute("text"));
-        checkString(elem, elem->Attribute("tooltip"));
+      for (XMLElement* elem : tools) {
+        checkString(fullFn, elem, elem->Attribute("text"));
+        checkString(fullFn, elem, elem->Attribute("tooltip"));
       }
       xmlGroup = xmlGroup->NextSiblingElement();
     }
   }
 
-  void checkString(TiXmlElement* elem, const char* text) {
+  void checkString(const std::string& filename, XMLElement* elem, const char* text)
+  {
     if (!text)
-      return;                   // Do nothing
+      return; // Do nothing
     else if (text[0] == '@') {
       for (auto& cfg : m_stringFiles) {
         std::string lang = base::get_file_title(cfg->filename());
@@ -190,35 +195,28 @@ public:
 
         if (text[1] == '.') {
           section = m_prefixId.c_str();
-          var = text+2;
+          var = text + 2;
         }
         else {
           std::vector<std::string> parts;
           base::split_string(text, parts, ".");
-          if (parts.size() >= 1) section = parts[0].c_str()+1;
-          if (parts.size() >= 2) var = parts[1];
+          if (parts.size() >= 1)
+            section = parts[0].c_str() + 1;
+          if (parts.size() >= 2)
+            var = parts[1];
         }
 
-        const char* translated =
-          cfg->getValue(section.c_str(), var.c_str(), nullptr);
+        const char* translated = cfg->getValue(section.c_str(), var.c_str(), nullptr);
         if (!translated || translated[0] == 0) {
-          std::cerr << elem->GetDocument()->Value() << ":"
-                    << elem->Row() << ":"
-                    << elem->Column() << ": "
-                    << "warning: <" << lang
-                    << "> translation for a string ID wasn't found '"
+          std::cerr << filename << ":" << elem->GetLineNum() << ": "
+                    << "warning: <" << lang << "> translation for a string ID wasn't found '"
                     << text << "' (" << section << "." << var << ")\n";
         }
       }
     }
-    else if (text[0] != '!' &&
-             has_alpha_char(text) &&
-             !is_email(text)) {
-      std::cerr << elem->GetDocument()->Value() << ":"
-                << elem->Row() << ":"
-                << elem->Column() << ": "
-                << "warning: raw string found '"
-                << text << "'\n";
+    else if (text[0] != '!' && has_alpha_char(text) && !is_email(text)) {
+      std::cerr << filename << ":" << elem->GetLineNum() << ": "
+                << "warning: raw string found '" << text << "'\n";
     }
   }
 

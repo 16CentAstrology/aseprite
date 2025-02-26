@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2019-2022  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/cmd/replace_tileset.h"
@@ -16,8 +16,8 @@
 #include "app/commands/new_params.h"
 #include "app/commands/params.h"
 #include "app/doc_api.h"
-#include "app/ini_file.h"
 #include "app/i18n/strings.h"
+#include "app/ini_file.h"
 #include "app/modules/gui.h"
 #include "app/modules/palettes.h"
 #include "app/sprite_job.h"
@@ -40,7 +40,7 @@
 
 #include <algorithm>
 
-#define PERC_FORMAT     "%.4g"
+#define PERC_FORMAT "%.4g"
 
 namespace app {
 
@@ -48,14 +48,22 @@ using namespace ui;
 using doc::algorithm::ResizeMethod;
 
 struct SpriteSizeParams : public NewParams {
-  Param<bool> ui { this, true, { "ui", "use-ui" } };
-  Param<int> width { this, 0, "width" };
-  Param<int> height { this, 0, "height" };
-  Param<bool> lockRatio { this, false, "lockRatio" };
-  Param<double> scale { this, 1.0, "scale" };
-  Param<double> scaleX { this, 1.0, "scaleX" };
-  Param<double> scaleY { this, 1.0, "scaleY" };
-  Param<ResizeMethod> method { this, ResizeMethod::RESIZE_METHOD_NEAREST_NEIGHBOR, { "method", "resize-method" } };
+  Param<bool> ui{
+    this,
+    true,
+    { "ui", "use-ui" }
+  };
+  Param<int> width{ this, 0, "width" };
+  Param<int> height{ this, 0, "height" };
+  Param<bool> lockRatio{ this, false, "lockRatio" };
+  Param<double> scale{ this, 1.0, "scale" };
+  Param<double> scaleX{ this, 1.0, "scaleX" };
+  Param<double> scaleY{ this, 1.0, "scaleY" };
+  Param<ResizeMethod> method{
+    this,
+    ResizeMethod::RESIZE_METHOD_NEAREST_NEIGHBOR,
+    { "method", "resize-method" }
+  };
 };
 
 class SpriteSizeJob : public SpriteJob {
@@ -64,40 +72,51 @@ class SpriteSizeJob : public SpriteJob {
   ResizeMethod m_resize_method;
 
   template<typename T>
-  T scale_x(T x) const { return x * T(m_new_width) / T(sprite()->width()); }
+  T scale_x(T x) const
+  {
+    return x * T(m_new_width) / T(sprite()->width());
+  }
 
   template<typename T>
-  T scale_y(T y) const { return y * T(m_new_height) / T(sprite()->height()); }
+  T scale_y(T y) const
+  {
+    return y * T(m_new_height) / T(sprite()->height());
+  }
 
   template<typename T>
-  gfx::RectT<T> scale_rect(const gfx::RectT<T>& rc) const {
+  gfx::RectT<T> scale_rect(const gfx::RectT<T>& rc) const
+  {
     T x1 = scale_x(rc.x);
     T y1 = scale_y(rc.y);
-    return gfx::RectT<T>(x1, y1,
-                         scale_x(rc.x2()) - x1,
-                         scale_y(rc.y2()) - y1);
+    return gfx::RectT<T>(x1, y1, scale_x(rc.x2()) - x1, scale_y(rc.y2()) - y1);
   }
 
 public:
-
-  SpriteSizeJob(const ContextReader& reader, int new_width, int new_height, ResizeMethod resize_method)
-    : SpriteJob(reader, Strings::sprite_size_title().c_str()) {
+  SpriteSizeJob(Context* ctx,
+                Doc* doc,
+                const int new_width,
+                const int new_height,
+                const ResizeMethod resize_method,
+                const bool showProgress)
+    : SpriteJob(ctx, doc, Strings::sprite_size_title(), showProgress)
+  {
     m_new_width = new_width;
     m_new_height = new_height;
     m_resize_method = resize_method;
   }
 
 protected:
-
   // [working thread]
-  void onJob() override {
-    DocApi api = writer().document()->getApi(tx());
+  void onSpriteJob(Tx& tx) override
+  {
+    DocApi api = document()->getApi(tx);
     Tilesets* tilesets = sprite()->tilesets();
 
     int img_count = 0;
     if (tilesets) {
       for (Tileset* tileset : *tilesets) {
-        img_count += tileset->size();
+        if (tileset)
+          img_count += tileset->size();
       }
     }
     for (Cel* cel : sprite()->uniqueCels()) { // TODO add size() member function to CelsRange
@@ -106,47 +125,50 @@ protected:
     }
 
     int progress = 0;
-    const gfx::SizeF scale(
-      double(m_new_width) / double(sprite()->width()),
-      double(m_new_height) / double(sprite()->height()));
+    const gfx::SizeF scale(double(m_new_width) / double(sprite()->width()),
+                           double(m_new_height) / double(sprite()->height()));
 
     // Resize tilesets
     if (tilesets) {
-      for (tileset_index tsi=0; tsi<tilesets->size(); ++tsi) {
+      for (tileset_index tsi = 0; tsi < tilesets->size(); ++tsi) {
         Tileset* tileset = tilesets->get(tsi);
-        ASSERT(tileset);
+        if (!tileset)
+          continue;
 
         gfx::Size newGridSize = tileset->grid().tileSize();
         newGridSize.w *= scale.w;
         newGridSize.h *= scale.h;
-        if (newGridSize.w < 1) newGridSize.w = 1;
-        if (newGridSize.h < 1) newGridSize.h = 1;
+        if (newGridSize.w < 1)
+          newGridSize.w = 1;
+        if (newGridSize.h < 1)
+          newGridSize.h = 1;
         doc::Grid newGrid(newGridSize);
 
         auto newTileset = new doc::Tileset(sprite(), newGrid, tileset->size());
         doc::tile_index idx = 0;
-        for (doc::ImageRef tileImg : *tileset) {
+        newTileset->setName(tileset->name());
+        newTileset->setUserData(tileset->userData());
+        for (auto& tile : *tileset) {
           if (idx != 0) {
-            doc::ImageRef newTileImg(
-              resize_image(
-                tileImg.get(),
-                scale,
-                m_resize_method,
-                sprite()->palette(0),
-                sprite()->rgbMap(0)));   // TODO first frame?
+            doc::ImageRef newTileImg(resize_image(tile.image.get(),
+                                                  scale,
+                                                  m_resize_method,
+                                                  sprite()->palette(0),
+                                                  sprite()->rgbMap(0))); // TODO first frame?
 
             newTileset->set(idx, newTileImg);
+            newTileset->setTileData(idx, tileset->getTileData(idx));
           }
 
           jobProgress((float)progress / img_count);
           ++progress;
           ++idx;
         }
-        tx()(new cmd::ReplaceTileset(sprite(), tsi, newTileset));
+        tx(new cmd::ReplaceTileset(sprite(), tsi, newTileset));
 
         // Cancel all the operation?
         if (isCanceled())
-          return;        // Tx destructor will undo all operations
+          return; // Tx destructor will undo all operations
       }
     }
 
@@ -157,23 +179,18 @@ protected:
       // tileset).
       if (cel->layer()->isTilemap()) {
         Tileset* tileset = static_cast<LayerTilemap*>(cel->layer())->tileset();
-        gfx::Size canvasSize =
-          tileset->grid().tilemapSizeToCanvas(
-            gfx::Size(cel->image()->width(),
-                      cel->image()->height()));
-        gfx::Rect newBounds(cel->x()*scale.w,
-                            cel->y()*scale.h,
-                            canvasSize.w,
-                            canvasSize.h);
-        tx()(new cmd::SetCelBoundsF(cel, newBounds));
+        gfx::Size canvasSize = tileset->grid().tilemapSizeToCanvas(
+          gfx::Size(cel->image()->width(), cel->image()->height()));
+        gfx::Rect newBounds(cel->x() * scale.w, cel->y() * scale.h, canvasSize.w, canvasSize.h);
+        tx(new cmd::SetCelBoundsF(cel, newBounds));
       }
       else {
-        resize_cel_image(
-          tx(), cel, scale,
-          m_resize_method,
-          cel->layer()->isReference() ?
-          -cel->boundsF().origin():
-          gfx::PointF(-cel->bounds().origin()));
+        resize_cel_image(tx,
+                         cel,
+                         scale,
+                         m_resize_method,
+                         cel->layer()->isReference() ? -cel->boundsF().origin() :
+                                                       gfx::PointF(-cel->bounds().origin()));
       }
 
       jobProgress((float)progress / img_count);
@@ -181,34 +198,34 @@ protected:
 
       // Cancel all the operation?
       if (isCanceled())
-        return;        // Tx destructor will undo all operations
+        return; // Tx destructor will undo all operations
     }
 
     // Resize mask
     if (document()->isMaskVisible()) {
-      ImageRef old_bitmap
-        (crop_image(document()->mask()->bitmap(), -1, -1,
-                    document()->mask()->bitmap()->width()+2,
-                    document()->mask()->bitmap()->height()+2, 0));
+      ImageRef old_bitmap(crop_image(document()->mask()->bitmap(),
+                                     -1,
+                                     -1,
+                                     document()->mask()->bitmap()->width() + 2,
+                                     document()->mask()->bitmap()->height() + 2,
+                                     0));
 
       int w = scale_x(old_bitmap->width());
       int h = scale_y(old_bitmap->height());
       std::unique_ptr<Mask> new_mask(new Mask);
-      new_mask->replace(
-        gfx::Rect(
-          scale_x(document()->mask()->bounds().x-1),
-          scale_y(document()->mask()->bounds().y-1),
-          std::max(1, w),
-          std::max(1, h)));
+      new_mask->replace(gfx::Rect(scale_x(document()->mask()->bounds().x - 1),
+                                  scale_y(document()->mask()->bounds().y - 1),
+                                  std::max(1, w),
+                                  std::max(1, h)));
 
       // Always use the nearest-neighbor method to resize the bitmap
       // mask.
-      algorithm::resize_image(
-        old_bitmap.get(), new_mask->bitmap(),
-        doc::algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR,
-        sprite()->palette(0), // Ignored
-        sprite()->rgbMap(0),  // Ignored
-        -1);                  // Ignored
+      algorithm::resize_image(old_bitmap.get(),
+                              new_mask->bitmap(),
+                              doc::algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR,
+                              sprite()->palette(0), // Ignored
+                              sprite()->rgbMap(0),  // Ignored
+                              -1);                  // Ignored
 
       // Reshrink
       new_mask->intersect(new_mask->bounds());
@@ -231,29 +248,26 @@ protected:
           newKey.setCenter(scale_rect(newKey.center()));
 
         if (newKey.hasPivot())
-          newKey.setPivot(gfx::Point(scale_x(newKey.pivot().x),
-                                     scale_y(newKey.pivot().y)));
+          newKey.setPivot(gfx::Point(scale_x(newKey.pivot().x), scale_y(newKey.pivot().y)));
 
-        tx()(new cmd::SetSliceKey(slice, k.frame(), newKey));
+        tx(new cmd::SetSliceKey(slice, k.frame(), newKey));
       }
     }
 
     // Resize Sprite
     api.setSpriteSize(sprite(), m_new_width, m_new_height);
   }
-
 };
-
-#ifdef ENABLE_UI
 
 class SpriteSizeWindow : public app::gen::SpriteSize {
 public:
-  SpriteSizeWindow(Context* ctx, const SpriteSizeParams& params) : m_ctx(ctx) {
-    lockRatio()->Click.connect([this]{ onLockRatioClick(); });
-    widthPx()->Change.connect([this]{ onWidthPxChange(); });
-    heightPx()->Change.connect([this]{ onHeightPxChange(); });
-    widthPerc()->Change.connect([this]{ onWidthPercChange(); });
-    heightPerc()->Change.connect([this]{ onHeightPercChange(); });
+  SpriteSizeWindow(Context* ctx, const SpriteSizeParams& params) : m_ctx(ctx)
+  {
+    lockRatio()->Click.connect([this] { onLockRatioClick(); });
+    widthPx()->Change.connect([this] { onWidthPxChange(); });
+    heightPx()->Change.connect([this] { onHeightPxChange(); });
+    widthPerc()->Change.connect([this] { onWidthPercChange(); });
+    heightPerc()->Change.connect([this] { onHeightPercChange(); });
 
     widthPx()->setTextf("%d", params.width());
     heightPx()->setTextf("%d", params.height());
@@ -261,8 +275,8 @@ public:
     heightPerc()->setTextf(PERC_FORMAT, params.scaleY() * 100.0);
 
     static_assert(doc::algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR == 0 &&
-                  doc::algorithm::RESIZE_METHOD_BILINEAR == 1 &&
-                  doc::algorithm::RESIZE_METHOD_ROTSPRITE == 2,
+                    doc::algorithm::RESIZE_METHOD_BILINEAR == 1 &&
+                    doc::algorithm::RESIZE_METHOD_ROTSPRITE == 2,
                   "ResizeMethod enum has changed");
     method()->addItem(Strings::sprite_size_method_nearest_neighbor());
     method()->addItem(Strings::sprite_size_method_bilinear());
@@ -271,21 +285,24 @@ public:
     if (params.method.isSet())
       resize_method = (int)params.method();
     else
-      resize_method = get_config_int("SpriteSize", "Method",
-                                     doc::algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR);
+      resize_method =
+        get_config_int("SpriteSize", "Method", doc::algorithm::RESIZE_METHOD_NEAREST_NEIGHBOR);
     method()->setSelectedItemIndex(resize_method);
-    const bool lock = (params.lockRatio.isSet())? params.lockRatio() : get_config_bool("SpriteSize", "LockRatio", false);
+    const bool lock = (params.lockRatio.isSet()) ?
+                        params.lockRatio() :
+                        get_config_bool("SpriteSize", "LockRatio", false);
     lockRatio()->setSelected(lock);
   }
 
 private:
-
-  void onLockRatioClick() {
+  void onLockRatioClick()
+  {
     const ContextReader reader(m_ctx);
     onWidthPxChange();
   }
 
-  void onWidthPxChange() {
+  void onWidthPxChange()
+  {
     const ContextReader reader(m_ctx);
     const Sprite* sprite(reader.sprite());
     int width = widthPx()->textInt();
@@ -299,7 +316,8 @@ private:
     }
   }
 
-  void onHeightPxChange() {
+  void onHeightPxChange()
+  {
     const ContextReader reader(m_ctx);
     const Sprite* sprite(reader.sprite());
     int height = heightPx()->textInt();
@@ -313,7 +331,8 @@ private:
     }
   }
 
-  void onWidthPercChange() {
+  void onWidthPercChange()
+  {
     const ContextReader reader(m_ctx);
     const Sprite* sprite(reader.sprite());
     double width = widthPerc()->textDouble();
@@ -326,7 +345,8 @@ private:
     }
   }
 
-  void onHeightPercChange() {
+  void onHeightPercChange()
+  {
     const ContextReader reader(m_ctx);
     const Sprite* sprite(reader.sprite());
     double height = heightPerc()->textDouble();
@@ -341,7 +361,6 @@ private:
 
   Context* m_ctx;
 };
-#endif // ENABLE_UI
 
 class SpriteSizeCommand : public CommandWithNewParams<SpriteSizeParams> {
 public:
@@ -365,11 +384,10 @@ bool SpriteSizeCommand::onEnabled(Context* context)
 
 void SpriteSizeCommand::onExecute(Context* context)
 {
-#ifdef ENABLE_UI
   const bool ui = (params().ui() && context->isUIAvailable());
-#endif
-  const ContextReader reader(context);
-  const Sprite* sprite(reader.sprite());
+  const Site site = context->activeSite();
+  Doc* doc = site.document();
+  Sprite* sprite = site.sprite();
   auto& params = this->params();
 
   double ratio = sprite->width() / double(sprite->height());
@@ -429,7 +447,6 @@ void SpriteSizeCommand::onExecute(Context* context)
   int new_height = params.height();
   ResizeMethod resize_method = params.method();
 
-#ifdef ENABLE_UI
   if (ui) {
     SpriteSizeWindow window(context, params);
     window.remapWindow();
@@ -450,20 +467,17 @@ void SpriteSizeCommand::onExecute(Context* context)
     set_config_int("SpriteSize", "Method", resize_method);
     set_config_bool("SpriteSize", "LockRatio", window.lockRatio()->isSelected());
   }
-#endif // ENABLE_UI
 
   new_width = std::clamp(new_width, 1, DOC_SPRITE_MAX_WIDTH);
   new_height = std::clamp(new_height, 1, DOC_SPRITE_MAX_HEIGHT);
 
   {
-    SpriteSizeJob job(reader, new_width, new_height, resize_method);
+    SpriteSizeJob job(context, doc, new_width, new_height, resize_method, ui);
     job.startJob();
     job.waitJob();
   }
 
-#ifdef ENABLE_UI
-  update_screen_for_document(reader.document());
-#endif
+  update_screen_for_document(doc);
 }
 
 Command* CommandFactory::createSpriteSizeCommand()

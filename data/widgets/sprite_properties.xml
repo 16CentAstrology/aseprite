@@ -1,8 +1,8 @@
 <!-- Aseprite -->
-<!-- Copyright (C) 2018-2020  Igara Studio S.A. -->
+<!-- Copyright (C) 2018-2024  Igara Studio S.A. -->
 <!-- Copyright (C) 2001-2016  David Capello -->
 <gui>
-<window id="sprite_properties" text="@.title">
+<window id="sprite_properties" text="@.title" help="sprite-properties">
   <vbox>
     <grid id="properties_grid" columns="3">
       <label text="@.filename" />
@@ -36,18 +36,28 @@
 
       <label text="@.color_profile" />
       <hbox>
-        <combobox id="color_profile" cell_align="horizontal" expansive="true"></combobox>
+        <combobox id="color_profile" cell_align="horizontal" expansive="true" />
         <hbox homogeneous="true">
-          <button id="assign_color_profile" text="@.assign_color_profile">Assign</button>
-          <button id="convert_color_profile" text="@.convert_color_profile">Convert</button>
+          <button id="assign_color_profile" text="@.assign" />
+          <button id="convert_color_profile" text="@.convert" />
         </hbox>
       </hbox>
     </grid>
+
+    <vbox expansive="true" id="tilesets_placeholder">
+      <separator text="@.tilesets" horizontal="true" />
+      <view id="tilesets_view" expansive="true">
+        <listbox id="tilesets"></listbox>
+      </view>
+    </vbox>
+
     <separator horizontal="true" />
     <hbox>
       <boxfiller />
-      <button text="@general.ok" closewindow="true" id="ok" magnet="true" width="60" />
-      <button text="@general.cancel" closewindow="true" id="cancel" width="60" />
+      <hbox homogeneous="true">
+        <button text="@general.ok" closewindow="true" id="ok" magnet="true" minwidth="60" />
+        <button text="@general.cancel" closewindow="true" id="cancel" />
+      </hbox>
     </hbox>
   </vbox>
 </window>

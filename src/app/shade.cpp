@@ -1,11 +1,12 @@
 // Aseprite
+// Copyright (C) 2023  Igara Studio S.A.
 // Copyright (C) 2001-2015  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/shade.h"
@@ -31,8 +32,9 @@ std::string shade_to_string(const Shade& shade)
 {
   std::string res;
   for (const auto& s : shade) {
+    if (!res.empty())
+      res += " ";
     res += s.toString();
-    res += " ";
   }
   return res;
 }

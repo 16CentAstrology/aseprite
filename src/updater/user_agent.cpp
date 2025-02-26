@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2019-2021  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2017  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "updater/user_agent.h"
@@ -14,50 +14,40 @@
 #include "base/platform.h"
 #include "ver/info.h"
 
-#include <string>
 #include <sstream>
+#include <string>
 
 namespace updater {
 
-std::string getUserAgent()
+std::string getFullOSString()
 {
   base::Platform p = base::get_platform();
-  std::stringstream userAgent;
-
-  // App name and version
-  userAgent << get_app_name() << "/" << get_app_version() << " (";
+  std::stringstream os;
 
 #if LAF_WINDOWS
 
   // ----------------------------------------------------------------------
   // Windows
 
-  userAgent << "Windows";
+  os << "Windows";
   switch (p.windowsType) {
-    case base::Platform::WindowsType::Server:
-      userAgent << " Server";
-      break;
-    case base::Platform::WindowsType::NT:
-      userAgent << " NT";
-      break;
+    case base::Platform::WindowsType::Server: os << " Server"; break;
+    case base::Platform::WindowsType::NT:     os << " NT"; break;
   }
-  userAgent << " " << p.osVer.major() << "." << p.osVer.minor();
+  os << " " << p.osVer.str();
 
   if (p.servicePack.major() > 0)
-    userAgent << " SP" << p.servicePack.major();
+    os << " SP" << p.servicePack.major();
 
   if (p.isWow64)
-    userAgent << "; WOW64";
+    os << "; WOW64";
 
   if (p.wineVer)
-    userAgent << "; Wine " << p.wineVer;
+    os << "; Wine " << p.wineVer;
 
 #elif LAF_MACOS
 
-  userAgent << "macOS "
-            << p.osVer.major() << "."
-            << p.osVer.minor() << "."
-            << p.osVer.patch();
+  os << "macOS " << p.osVer.major() << "." << p.osVer.minor() << "." << p.osVer.patch();
 
 #else
 
@@ -65,14 +55,22 @@ std::string getUserAgent()
   // Unix like
 
   if (!p.distroName.empty()) {
-    userAgent << p.distroName;
+    os << p.distroName;
     if (!p.distroVer.empty())
-      userAgent << " " << p.distroVer;
+      os << " " << p.distroVer;
   }
 
 #endif
 
-  userAgent << ")";
+  return os.str();
+}
+
+std::string getUserAgent()
+{
+  std::stringstream userAgent;
+
+  // App name and version
+  userAgent << get_app_name() << "/" << get_app_version() << " (" << getFullOSString() << ")";
   return userAgent.str();
 }
 

@@ -5,7 +5,7 @@
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/commands/cmd_set_palette.h"
@@ -37,9 +37,8 @@ void SetPaletteCommand::onExecute(Context* context)
 
   ContextWriter writer(context);
   if (writer.document()) {
-    Tx tx(writer.context(), "Set Palette");
-    writer.document()->getApi(tx)
-      .setPalette(writer.sprite(), writer.frame(), m_palette);
+    Tx tx(writer, "Set Palette");
+    writer.document()->getApi(tx).setPalette(writer.sprite(), writer.frame(), m_palette);
     tx.commit();
   }
   set_current_palette(m_palette, false);

@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2019-2021  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2016  David Capello
 //
 // This program is distributed under the terms of
@@ -10,6 +10,7 @@
 #pragma once
 
 #include "app/check_update_delegate.h"
+#include "app/ui/input_chain_element.h"
 #include "app/ui/tabs.h"
 #include "app/ui/workspace_view.h"
 #include "ui/box.h"
@@ -17,71 +18,86 @@
 #include "home_view.xml.h"
 
 namespace ui {
-  class View;
+class View;
 }
 
 namespace app {
 
-  class DataRecoveryView;
-  class NewsListBox;
-  class RecentFilesListBox;
-  class RecentFoldersListBox;
+class DataRecoveryView;
+class NewsListBox;
+class RecentFilesListBox;
+class RecentFoldersListBox;
 
-  namespace crash {
-    class DataRecovery;
-  }
+namespace crash {
+class DataRecovery;
+}
 
-  class HomeView : public app::gen::HomeView
-                 , public TabView
-                 , public WorkspaceView
+class HomeView : public app::gen::HomeView,
+                 public TabView,
+                 public WorkspaceView,
+                 public app::InputChainElement
 #ifdef ENABLE_UPDATER
-                 , public CheckUpdateDelegate
+  ,
+                 public CheckUpdateDelegate
 #endif
-  {
-  public:
-    HomeView();
-    ~HomeView();
+{
+public:
+  HomeView();
+  ~HomeView();
 
-    // When crash::DataRecovery finish to search for sessions, this
-    // function is called.
-    void dataRecoverySessionsAreReady();
+  // When crash::DataRecovery finish to search for sessions, this
+  // function is called.
+  void dataRecoverySessionsAreReady();
 
 #if ENABLE_SENTRY
-    void updateConsentCheckbox();
+  void updateConsentCheckbox();
 #endif
 
-    // TabView implementation
-    std::string getTabText() override;
-    TabIcon getTabIcon() override;
-    gfx::Color getTabColor() override;
+  // TabView implementation
+  std::string getTabText() override;
+  TabIcon getTabIcon() override;
+  gfx::Color getTabColor() override;
 
-    // WorkspaceView implementation
-    ui::Widget* getContentWidget() override { return this; }
-    bool onCloseView(Workspace* workspace, bool quitting) override;
-    void onAfterRemoveView(Workspace* workspace) override;
-    void onTabPopup(Workspace* workspace) override;
-    void onWorkspaceViewSelected() override;
+  // WorkspaceView implementation
+  ui::Widget* getContentWidget() override { return this; }
+  bool onCloseView(Workspace* workspace, bool quitting) override;
+  void onAfterRemoveView(Workspace* workspace) override;
+  void onTabPopup(Workspace* workspace) override;
+  void onWorkspaceViewSelected() override;
+  InputChainElement* onGetInputChainElement() override { return this; }
 
-  protected:
-    void onResize(ui::ResizeEvent& ev) override;
+  // InputChainElement impl
+  void onNewInputPriority(InputChainElement* element, const ui::Message* msg) override;
+  bool onCanCut(Context* ctx) override;
+  bool onCanCopy(Context* ctx) override;
+  bool onCanPaste(Context* ctx) override;
+  bool onCanClear(Context* ctx) override;
+  bool onCut(Context* ctx) override;
+  bool onCopy(Context* ctx) override;
+  bool onPaste(Context* ctx, const gfx::Point* position) override;
+  bool onClear(Context* ctx) override;
+  void onCancel(Context* ctx) override;
+
+protected:
+  void onResize(ui::ResizeEvent& ev) override;
 #ifdef ENABLE_UPDATER
-    // CheckUpdateDelegate impl
-    void onCheckingUpdates() override;
-    void onUpToDate() override;
-    void onNewUpdate(const std::string& url, const std::string& version) override;
+  // CheckUpdateDelegate impl
+  void onCheckingUpdates() override;
+  void onUpToDate() override;
+  void onNewUpdate(const std::string& url, const std::string& version) override;
 #endif
 
-  private:
-    void onNewFile();
-    void onOpenFile();
-    void onRecoverSprites();
+private:
+  void onNewFile();
+  void onOpenFile();
+  void onRecoverSprites();
 
-    RecentFilesListBox* m_files;
-    RecentFoldersListBox* m_folders;
-    NewsListBox* m_news;
-    crash::DataRecovery* m_dataRecovery;
-    DataRecoveryView* m_dataRecoveryView;
-  };
+  RecentFilesListBox* m_files;
+  RecentFoldersListBox* m_folders;
+  NewsListBox* m_news;
+  crash::DataRecovery* m_dataRecovery;
+  DataRecoveryView* m_dataRecoveryView;
+};
 
 } // namespace app
 

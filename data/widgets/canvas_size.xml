@@ -1,8 +1,8 @@
 <!-- Aseprite -->
-<!-- Copyright (C) 2019  Igara Studio S.A. -->
+<!-- Copyright (C) 2019-2024  Igara Studio S.A. -->
 <!-- Copyright (C) 2001-2018  David Capello -->
 <gui>
- <window id="canvas_size" text="@.title">
+ <window id="canvas_size" text="@.title" help="canvas">
   <vbox>
     <separator text="@.size" left="true" horizontal="true" />
     <hbox>
@@ -14,15 +14,15 @@
         <hbox filler="true" cell_hspan="2" />
       </grid>
       <buttonset columns="3" id="dir">
-        <item icon="canvas_nw" />
-        <item icon="canvas_n" />
-        <item icon="canvas_ne" />
-        <item icon="canvas_w" />
-        <item icon="canvas_c" />
-        <item icon="canvas_e" />
-        <item icon="canvas_sw" />
-        <item icon="canvas_s" />
-        <item icon="canvas_se" />
+        <item icon="canvas_nw" style="dir_item" />
+        <item icon="canvas_n" style="dir_item" />
+        <item icon="canvas_ne" style="dir_item" />
+        <item icon="canvas_w" style="dir_item" />
+        <item icon="canvas_c" style="dir_item" />
+        <item icon="canvas_e" style="dir_item" />
+        <item icon="canvas_sw" style="dir_item" />
+        <item icon="canvas_s" style="dir_item" />
+        <item icon="canvas_se" style="dir_item" />
       </buttonset>
     </hbox>
 
@@ -49,7 +49,7 @@
     <hbox>
       <boxfiller />
       <hbox homogeneous="true">
-        <button text="@general.ok" closewindow="true" id="ok" magnet="true" width="60" />
+        <button text="@general.ok" closewindow="true" id="ok" magnet="true" minwidth="60" />
         <button text="@general.cancel" closewindow="true" />
       </hbox>
     </hbox>

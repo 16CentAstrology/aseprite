@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2019  Igara Studio S.A.
+// Copyright (C) 2019-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
@@ -12,8 +12,7 @@
 
 extern "C" struct lua_State;
 
-namespace app {
-namespace script {
+namespace app { namespace script {
 
 template<typename T>
 T get_value_from_lua(lua_State* L, int index);
@@ -21,9 +20,11 @@ T get_value_from_lua(lua_State* L, int index);
 template<typename T>
 void push_value_to_lua(lua_State* L, const T& value);
 
-} // namespace script
-} // namespace app
+// Returns true if the given table is an array
+bool is_array_table(lua_State* L, int index);
 
-#endif  // ENABLE_SCRIPTING
+}} // namespace app::script
+
+#endif // ENABLE_SCRIPTING
 
 #endif

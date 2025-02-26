@@ -23,21 +23,19 @@ typedef std::unique_ptr<Doc> DocPtr;
 
 class BasicDocApiTest : public ::testing::Test {
 public:
-  BasicDocApiTest() :
-    doc((ctx.documents().add(32, 16))),
-    sprite(doc->sprite()),
-    root(sprite->root()),
-    layer1(dynamic_cast<LayerImage*>(sprite->root()->firstLayer())),
-    layer2(new LayerImage(sprite)),
-    layer3(new LayerImage(sprite))
+  BasicDocApiTest()
+    : doc((ctx.documents().add(32, 16)))
+    , sprite(doc->sprite())
+    , root(sprite->root())
+    , layer1(dynamic_cast<LayerImage*>(sprite->root()->firstLayer()))
+    , layer2(new LayerImage(sprite))
+    , layer3(new LayerImage(sprite))
   {
     root->addLayer(layer2);
     root->addLayer(layer3);
   }
 
-  ~BasicDocApiTest() {
-    doc->close();
-  }
+  ~BasicDocApiTest() { doc->close(); }
 
   TestContextT<Context> ctx;
   DocPtr doc;
@@ -52,7 +50,7 @@ TEST_F(BasicDocApiTest, RestackLayerBefore)
 {
   EXPECT_EQ(layer1, root->firstLayer());
   {
-    Tx tx(&ctx, "");
+    Tx tx(sprite, "");
     // Do nothing
     doc->getApi(tx).restackLayerBefore(layer1, layer1->parent(), layer1);
     EXPECT_EQ(layer1, root->firstLayer());
@@ -63,7 +61,7 @@ TEST_F(BasicDocApiTest, RestackLayerBefore)
 
   EXPECT_EQ(layer1, root->firstLayer());
   {
-    Tx tx(&ctx, "");
+    Tx tx(sprite, "");
     doc->getApi(tx).restackLayerBefore(layer1, layer3->parent(), layer3);
     EXPECT_EQ(layer2, root->firstLayer());
     EXPECT_EQ(layer1, root->firstLayer()->getNext());
@@ -73,7 +71,7 @@ TEST_F(BasicDocApiTest, RestackLayerBefore)
 
   EXPECT_EQ(layer1, root->firstLayer());
   {
-    Tx tx(&ctx, "");
+    Tx tx(sprite, "");
     doc->getApi(tx).restackLayerBefore(layer1, layer1->parent(), nullptr);
     EXPECT_EQ(layer2, root->firstLayer());
     EXPECT_EQ(layer3, root->firstLayer()->getNext());
@@ -86,7 +84,7 @@ TEST_F(BasicDocApiTest, RestackLayerAfter)
 {
   EXPECT_EQ(layer1, root->firstLayer());
   {
-    Tx tx(&ctx, "");
+    Tx tx(sprite, "");
     // Do nothing
     doc->getApi(tx).restackLayerAfter(layer1, layer1->parent(), layer1);
     EXPECT_EQ(layer1, root->firstLayer());
@@ -97,7 +95,7 @@ TEST_F(BasicDocApiTest, RestackLayerAfter)
 
   EXPECT_EQ(layer1, root->firstLayer());
   {
-    Tx tx(&ctx, "");
+    Tx tx(sprite, "");
     doc->getApi(tx).restackLayerAfter(layer1, layer3->parent(), layer3);
     EXPECT_EQ(layer2, root->firstLayer());
     EXPECT_EQ(layer3, root->firstLayer()->getNext());
@@ -107,7 +105,7 @@ TEST_F(BasicDocApiTest, RestackLayerAfter)
 
   EXPECT_EQ(layer1, root->firstLayer());
   {
-    Tx tx(&ctx, "");
+    Tx tx(sprite, "");
     doc->getApi(tx).restackLayerAfter(layer3, layer3->parent(), nullptr);
     EXPECT_EQ(layer3, root->firstLayer());
     EXPECT_EQ(layer1, root->firstLayer()->getNext());
@@ -125,17 +123,15 @@ TEST_F(BasicDocApiTest, MoveCel)
   Image* image1 = cel1->image();
   EXPECT_EQ(32, image1->width());
   EXPECT_EQ(16, image1->height());
-  for (int v=0; v<image1->height(); ++v)
-    for (int u=0; u<image1->width(); ++u)
-      image1->putPixel(u, v, u+v*image1->width());
+  for (int v = 0; v < image1->height(); ++v)
+    for (int u = 0; u < image1->width(); ++u)
+      image1->putPixel(u, v, u + v * image1->width());
 
   // Create a copy for later comparison.
   std::unique_ptr<Image> expectedImage(Image::createCopy(image1));
 
-  Tx tx(&ctx, "");
-  doc->getApi(tx).moveCel(
-    layer1, frame_t(0),
-    layer2, frame_t(1));
+  Tx tx(sprite, "");
+  doc->getApi(tx).moveCel(layer1, frame_t(0), layer2, frame_t(1));
   tx.commit();
 
   EXPECT_EQ(NULL, layer1->cel(frame_t(0)));

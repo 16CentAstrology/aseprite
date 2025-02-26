@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2019-2022  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/ui/home_view.h"
@@ -25,6 +25,7 @@
 #include "app/ui/workspace.h"
 #include "app/ui/workspace_tabs.h"
 #include "app/ui_context.h"
+#include "app/util/clipboard.h"
 #include "base/exception.h"
 #include "fmt/format.h"
 #include "ui/label.h"
@@ -35,16 +36,16 @@
 #include "ver/info.h"
 
 #ifdef ENABLE_NEWS
-#include "app/ui/news_listbox.h"
+  #include "app/ui/news_listbox.h"
 #endif
 
 #if ENABLE_SENTRY
-#include "app/sentry_wrapper.h"
+  #include "app/sentry_wrapper.h"
 #endif
 
 #ifdef ENABLE_DRM
-#include "drm/drm.h"
-#include "aseprite_update.h"
+  #include "aseprite_update.h"
+  #include "drm/drm.h"
 #endif
 
 namespace app {
@@ -61,10 +62,10 @@ HomeView::HomeView()
   , m_dataRecovery(App::instance()->dataRecovery())
   , m_dataRecoveryView(nullptr)
 {
-  newFile()->Click.connect([this]{ onNewFile(); });
-  openFile()->Click.connect([this]{ onOpenFile(); });
+  newFile()->Click.connect([this] { onNewFile(); });
+  openFile()->Click.connect([this] { onOpenFile(); });
   if (m_dataRecovery)
-    recoverSprites()->Click.connect([this]{ onRecoverSprites(); });
+    recoverSprites()->Click.connect([this] { onRecoverSprites(); });
   else
     recoverSprites()->setVisible(false);
 
@@ -80,25 +81,22 @@ HomeView::HomeView()
 #if ENABLE_SENTRY
   // Show this option in home tab only when we require consent for the
   // first time and there is crash data available to report
-  if (Sentry::requireConsent() &&
-      Sentry::areThereCrashesToReport()) {
+  if (Sentry::requireConsent() && Sentry::areThereCrashesToReport()) {
     shareCrashdb()->setVisible(true);
-    shareCrashdb()->Click.connect(
-      [this]{
-        if (shareCrashdb()->isSelected())
-          Sentry::giveConsent();
-        else
-          Sentry::revokeConsent();
-      });
+    shareCrashdb()->Click.connect([this] {
+      if (shareCrashdb()->isSelected())
+        Sentry::giveConsent();
+      else
+        Sentry::revokeConsent();
+    });
   }
 #endif
 
-  InitTheme.connect(
-    [this]{
-      auto theme = SkinTheme::get(this);
-      setBgColor(theme->colors.workspace());
-      setChildSpacing(8 * guiscale());
-    });
+  InitTheme.connect([this] {
+    auto theme = SkinTheme::get(this);
+    setBgColor(theme->colors.workspace());
+    setChildSpacing(8 * guiscale());
+  });
   initTheme();
 }
 
@@ -116,11 +114,12 @@ void HomeView::dataRecoverySessionsAreReady()
 {
 #ifdef ENABLE_DATA_RECOVERY
 
-#ifdef ENABLE_TRIAL_MODE
-  DRM_INVALID{
+  #ifdef ENABLE_TRIAL_MODE
+  DRM_INVALID
+  {
     return;
   }
-#endif
+  #endif
 
   if (App::instance()->dataRecovery()->hasRecoverySessions()) {
     // We highlight the "Recover Files" options because we came from a crash
@@ -172,8 +171,7 @@ bool HomeView::onCloseView(Workspace* workspace, bool quitting)
 
 void HomeView::onAfterRemoveView(Workspace* workspace)
 {
-  if (m_dataRecoveryView &&
-      m_dataRecoveryView->parent()) {
+  if (m_dataRecoveryView && m_dataRecoveryView->parent()) {
     workspace->removeView(m_dataRecoveryView);
   }
 }
@@ -192,6 +190,67 @@ void HomeView::onWorkspaceViewSelected()
   StatusBar::instance()->showDefaultText();
 }
 
+void HomeView::onNewInputPriority(InputChainElement* element, const ui::Message* msg)
+{
+  // Do nothing
+}
+
+bool HomeView::onCanCut(Context* ctx)
+{
+  return false;
+}
+
+bool HomeView::onCanCopy(Context* ctx)
+{
+  return false;
+}
+
+bool HomeView::onCanPaste(Context* ctx)
+{
+  return (ctx->clipboard()->format() == ClipboardFormat::Image);
+}
+
+bool HomeView::onCanClear(Context* ctx)
+{
+  return false;
+}
+
+bool HomeView::onCut(Context* ctx)
+{
+  return false;
+}
+
+bool HomeView::onCopy(Context* ctx)
+{
+  return false;
+}
+
+bool HomeView::onPaste(Context* ctx, const gfx::Point* position)
+{
+  auto clipboard = ctx->clipboard();
+  if (clipboard->format() == ClipboardFormat::Image) {
+    // Create new sprite from the clipboard image.
+    Params params;
+    params.set("ui", "false");
+    params.set("fromClipboard", "true");
+    ctx->executeCommand(Commands::instance()->byId(CommandId::NewFile()), params);
+    return true;
+  }
+  else
+    return false;
+}
+
+bool HomeView::onClear(Context* ctx)
+{
+  // Do nothing
+  return false;
+}
+
+void HomeView::onCancel(Context* ctx)
+{
+  // Do nothing
+}
+
 void HomeView::onNewFile()
 {
   Command* command = Commands::instance()->byId(CommandId::NewFile());
@@ -206,10 +265,10 @@ void HomeView::onOpenFile()
 
 void HomeView::onResize(ui::ResizeEvent& ev)
 {
-  headerPlaceholder()->setVisible(ev.bounds().h > 200*ui::guiscale());
-  foldersPlaceholder()->setVisible(ev.bounds().h > 150*ui::guiscale());
+  headerPlaceholder()->setVisible(ev.bounds().h > 200 * ui::guiscale());
+  foldersPlaceholder()->setVisible(ev.bounds().h > 150 * ui::guiscale());
 #ifdef ENABLE_NEWS
-  newsPlaceholder()->setVisible(ev.bounds().w > 200*ui::guiscale());
+  newsPlaceholder()->setVisible(ev.bounds().w > 200 * ui::guiscale());
 #else
   newsPlaceholder()->setVisible(false);
 #endif
@@ -236,29 +295,28 @@ void HomeView::onUpToDate()
 
 void HomeView::onNewUpdate(const std::string& url, const std::string& version)
 {
-  checkUpdate()->setText(
-    fmt::format(Strings::home_view_new_version_available(),
-                get_app_name(), version));
-#ifdef ENABLE_DRM
-  DRM_INVALID {
+  checkUpdate()->setText(Strings::home_view_new_version_available(get_app_name(), version));
+  #ifdef ENABLE_DRM
+  DRM_INVALID
+  {
     checkUpdate()->setUrl(url);
   }
-  else {
+  else
+  {
     checkUpdate()->setUrl("");
     checkUpdate()->Click.connect([version] {
       app::AsepriteUpdate dlg(version);
       dlg.openWindowInForeground();
     });
   }
-#else
+  #else
   checkUpdate()->setUrl(url);
-#endif
+  #endif
   checkUpdate()->setVisible(true);
-  checkUpdate()->InitTheme.connect(
-    [this]{
-      auto theme = SkinTheme::get(this);
-      checkUpdate()->setStyle(theme->styles.workspaceUpdateLink());
-    });
+  checkUpdate()->InitTheme.connect([this] {
+    auto theme = SkinTheme::get(this);
+    checkUpdate()->setStyle(theme->styles.workspaceUpdateLink());
+  });
   checkUpdate()->initTheme();
 
   layout();
@@ -270,11 +328,12 @@ void HomeView::onRecoverSprites()
 {
 #ifdef ENABLE_DATA_RECOVERY
 
-#ifdef ENABLE_TRIAL_MODE
-  DRM_INVALID{
+  #ifdef ENABLE_TRIAL_MODE
+  DRM_INVALID
+  {
     return;
   }
-#endif
+  #endif
 
   ASSERT(m_dataRecovery); // "Recover Files" button is hidden when
                           // data recovery is disabled (m_dataRecovery == nullptr)
@@ -287,12 +346,11 @@ void HomeView::onRecoverSprites()
     // Restore the "Recover Files" link style when the
     // DataRecoveryView is empty (so there is no more warning icon on
     // it).
-    m_dataRecoveryView->Empty.connect(
-      [this]{
-        auto theme = SkinTheme::get(this);
-        recoverSprites()->setStyle(theme->styles.workspaceLink());
-        layout();
-      });
+    m_dataRecoveryView->Empty.connect([this] {
+      auto theme = SkinTheme::get(this);
+      recoverSprites()->setStyle(theme->styles.workspaceLink());
+      layout();
+    });
   }
 
   if (!m_dataRecoveryView->parent())

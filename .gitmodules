@@ -1,15 +1,9 @@
-[submodule "tests/third_party/json"]
-	path = tests/third_party/json
-	url = https://github.com/aseprite/json.lua
 [submodule "third_party/pixman"]
 	path = third_party/pixman
 	url = https://github.com/aseprite/pixman.git
 [submodule "third_party/simpleini"]
 	path = third_party/simpleini
 	url = https://github.com/aseprite/simpleini.git
-[submodule "third_party/gtest"]
-	path = third_party/gtest
-	url = https://github.com/aseprite/gtest.git
 [submodule "third_party/libwebp"]
 	path = third_party/libwebp
 	url = https://github.com/aseprite/libwebp.git
@@ -27,9 +21,6 @@
 [submodule "third_party/libpng"]
 	path = third_party/libpng
 	url = https://github.com/aseprite/libpng.git
-[submodule "src/clip"]
-	path = src/clip
-	url = https://github.com/aseprite/clip.git
 [submodule "src/observable"]
 	path = src/observable
 	url = https://github.com/aseprite/observable.git
@@ -81,3 +72,12 @@
 [submodule "src/psd"]
 	path = src/psd
 	url = https://github.com/aseprite/psd.git
+[submodule "third_party/qoi"]
+	path = third_party/qoi
+	url = https://github.com/aseprite/qoi.git
+[submodule "third_party/tinyxml2"]
+	path = third_party/tinyxml2
+	url = https://github.com/aseprite/tinyxml2.git
+[submodule "third_party/TinyEXIF"]
+	path = third_party/TinyEXIF
+	url = https://github.com/aseprite/TinyEXIF.git

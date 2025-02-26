@@ -1,11 +1,11 @@
 // Aseprite
-// Copyright (C) 2019  Igara Studio S.A.
+// Copyright (C) 2019-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/script/docobj.h"
@@ -13,8 +13,7 @@
 #include "app/script/luacpp.h"
 #include "doc/tilesets.h"
 
-namespace app {
-namespace script {
+namespace app { namespace script {
 
 using namespace doc;
 
@@ -31,17 +30,21 @@ int Tilesets_index(lua_State* L)
 {
   auto obj = get_docobj<Tilesets>(L, 1);
   const int i = lua_tonumber(L, 2);
-  if (i >= 1 && i <= int(obj->size()))
-    push_docobj(L, *(obj->begin()+i-1));
-  else
-    lua_pushnil(L);
+  if (i >= 1 && i <= int(obj->size())) {
+    auto ts = obj->get(i - 1);
+    if (ts) {
+      push_docobj(L, ts);
+      return 1;
+    }
+  }
+  lua_pushnil(L);
   return 1;
 }
 
 const luaL_Reg Tilesets_methods[] = {
-  { "__len", Tilesets_len },
+  { "__len",   Tilesets_len   },
   { "__index", Tilesets_index },
-  { nullptr, nullptr }
+  { nullptr,   nullptr        }
 };
 
 } // anonymous namespace
@@ -58,5 +61,4 @@ void push_tilesets(lua_State* L, Tilesets* tilesets)
   push_docobj(L, tilesets);
 }
 
-} // namespace script
-} // namespace app
+}} // namespace app::script

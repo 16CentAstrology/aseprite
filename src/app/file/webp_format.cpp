@@ -1,5 +1,5 @@
 // Aseprite
-// Copyright (C) 2018-2022  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2015-2018  David Capello
 // Copyright (C) 2015  Gabriel Rauter
 //
@@ -7,7 +7,7 @@
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/app.h"
@@ -27,9 +27,9 @@
 
 #include "webp_options.xml.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <algorithm>
 #include <map>
 
 #include <webp/demux.h>
@@ -40,28 +40,16 @@ namespace app {
 using namespace base;
 
 class WebPFormat : public FileFormat {
+  const char* onGetName() const override { return "webp"; }
 
-  const char* onGetName() const override {
-    return "webp";
-  }
+  void onGetExtensions(base::paths& exts) const override { exts.push_back("webp"); }
 
-  void onGetExtensions(base::paths& exts) const override {
-    exts.push_back("webp");
-  }
+  dio::FileFormat onGetDioFormat() const override { return dio::FileFormat::WEBP_ANIMATION; }
 
-  dio::FileFormat onGetDioFormat() const override {
-    return dio::FileFormat::WEBP_ANIMATION;
-  }
-
-  int onGetFlags() const override {
-    return
-      FILE_SUPPORT_LOAD |
-      FILE_SUPPORT_SAVE |
-      FILE_SUPPORT_RGB |
-      FILE_SUPPORT_RGBA |
-      FILE_SUPPORT_FRAMES |
-      FILE_SUPPORT_GET_FORMAT_OPTIONS |
-      FILE_ENCODE_ABSTRACT_IMAGE;
+  int onGetFlags() const override
+  {
+    return FILE_SUPPORT_LOAD | FILE_SUPPORT_SAVE | FILE_SUPPORT_RGB | FILE_SUPPORT_RGBA |
+           FILE_SUPPORT_FRAMES | FILE_SUPPORT_GET_FORMAT_OPTIONS | FILE_ENCODE_ABSTRACT_IMAGE;
   }
 
   bool onLoad(FileOp* fop) override;
@@ -79,15 +67,15 @@ FileFormat* CreateWebPFormat()
 const char* getDecoderErrorMessage(VP8StatusCode statusCode)
 {
   switch (statusCode) {
-    case VP8_STATUS_OK: return ""; break;
-    case VP8_STATUS_OUT_OF_MEMORY: return "out of memory"; break;
-    case VP8_STATUS_INVALID_PARAM: return "invalid parameters"; break;
-    case VP8_STATUS_BITSTREAM_ERROR: return "bitstream error"; break;
+    case VP8_STATUS_OK:                  return ""; break;
+    case VP8_STATUS_OUT_OF_MEMORY:       return "out of memory"; break;
+    case VP8_STATUS_INVALID_PARAM:       return "invalid parameters"; break;
+    case VP8_STATUS_BITSTREAM_ERROR:     return "bitstream error"; break;
     case VP8_STATUS_UNSUPPORTED_FEATURE: return "unsupported feature"; break;
-    case VP8_STATUS_SUSPENDED: return "suspended"; break;
-    case VP8_STATUS_USER_ABORT: return "user aborted"; break;
-    case VP8_STATUS_NOT_ENOUGH_DATA: return "not enough data"; break;
-    default: return "unknown error"; break;
+    case VP8_STATUS_SUSPENDED:           return "suspended"; break;
+    case VP8_STATUS_USER_ABORT:          return "user aborted"; break;
+    case VP8_STATUS_NOT_ENOUGH_DATA:     return "not enough data"; break;
+    default:                             return "unknown error"; break;
   }
 }
 
@@ -161,7 +149,7 @@ bool WebPFormat::onLoad(FileOp* fop)
   sprite->root()->addLayer(layer);
   sprite->setTotalFrames(anim_info.frame_count);
 
-  for (frame_t f=0; f<anim_info.frame_count; ++f) {
+  for (frame_t f = 0; f < anim_info.frame_count; ++f) {
     ImageRef image(Image::create(IMAGE_RGB, w, h));
     Cel* cel = new Cel(f, image);
     layer->addCel(cel);
@@ -180,12 +168,14 @@ bool WebPFormat::onLoad(FileOp* fop)
 
     Cel* cel = layer->cel(f);
     if (cel) {
-      memcpy(cel->image()->getPixelAddress(0, 0),
-             frame_rgba, h*w*sizeof(uint32_t));
+      const uint32_t* src = (const uint32_t*)frame_rgba;
+      for (int y = 0; y < h; ++y, src += w) {
+        memcpy(cel->image()->getPixelAddress(0, y), src, w * sizeof(uint32_t));
+      }
 
       if (!has_alpha) {
         const uint32_t* src = (const uint32_t*)frame_rgba;
-        const uint32_t* src_end = src + w*h;
+        const uint32_t* src_end = src + w * h;
         while (src < src_end) {
           const uint8_t alpha = (*src >> 24) & 0xff;
           if (alpha < 255) {
@@ -214,7 +204,7 @@ bool WebPFormat::onLoad(FileOp* fop)
   WebPAnimDecoderDelete(dec);
 
   // Don't use WebPDataClear because webp_data use a std::vector<> data.
-  //WebPDataClear(&webp_data);
+  // WebPDataClear(&webp_data);
 
   if (fop->isStop())
     return false;
@@ -228,11 +218,11 @@ bool WebPFormat::onLoad(FileOp* fop)
 struct WriterData {
   FILE* fp;
   FileOp* fop;
-  frame_t f, n;
-  double progress;
+  frame_t f = 0;
+  frame_t n;
+  double progress = 0.0;
 
-  WriterData(FILE* fp, FileOp* fop, frame_t f, frame_t n, double progress)
-    : fp(fp), fop(fop), f(f), n(n), progress(progress) { }
+  WriterData(FILE* fp, FileOp* fop, frame_t n) : fp(fp), fop(fop), n(n) {}
 };
 
 static int progress_report(int percent, const WebPPicture* pic)
@@ -240,7 +230,7 @@ static int progress_report(int percent, const WebPPicture* pic)
   auto wd = (WriterData*)pic->user_data;
   FileOp* fop = wd->fop;
 
-  double newProgress = (double(wd->f) + double(percent)/100.0) / double(wd->n);
+  double newProgress = (double(wd->f) + double(percent) / 100.0) / double(wd->n);
   wd->progress = std::max(wd->progress, newProgress);
   wd->progress = std::clamp(wd->progress, 0.0, 1.0);
 
@@ -256,15 +246,16 @@ bool WebPFormat::onSave(FileOp* fop)
   FileHandle handle(open_file_with_exception_sync_on_close(fop->filename(), "wb"));
   FILE* fp = handle.get();
 
-  const FileAbstractImage* sprite = fop->abstractImage();
-  const doc::frame_t totalFrames = sprite->frames();
+  const FileAbstractImage* sprite = fop->abstractImageToSave();
   const int w = sprite->width();
   const int h = sprite->height();
 
-  if (w > WEBP_MAX_DIMENSION ||
-      h > WEBP_MAX_DIMENSION) {
+  if (w > WEBP_MAX_DIMENSION || h > WEBP_MAX_DIMENSION) {
     fop->setError("WebP format cannot store %dx%d images. The maximum allowed size is %dx%d\n",
-                  w, h, WEBP_MAX_DIMENSION, WEBP_MAX_DIMENSION);
+                  w,
+                  h,
+                  WEBP_MAX_DIMENSION,
+                  WEBP_MAX_DIMENSION);
     return false;
   }
 
@@ -273,11 +264,9 @@ bool WebPFormat::onSave(FileOp* fop)
   WebPConfigInit(&config);
 
   switch (opts->type()) {
-
     case WebPOptions::Simple:
     case WebPOptions::Lossless:
-      if (!WebPConfigLosslessPreset(&config,
-                                    opts->compression())) {
+      if (!WebPConfigLosslessPreset(&config, opts->compression())) {
         fop->setError("Error in WebP configuration\n");
         return false;
       }
@@ -285,9 +274,7 @@ bool WebPFormat::onSave(FileOp* fop)
       break;
 
     case WebPOptions::Lossy:
-      if (!WebPConfigPreset(&config,
-                            opts->imagePreset(),
-                            static_cast<float>(opts->quality()))) {
+      if (!WebPConfigPreset(&config, opts->imagePreset(), static_cast<float>(opts->quality()))) {
         fop->setError("Error in WebP configuration preset\n");
         return false;
       }
@@ -296,29 +283,29 @@ bool WebPFormat::onSave(FileOp* fop)
 
   WebPAnimEncoderOptions enc_options;
   WebPAnimEncoderOptionsInit(&enc_options);
-  enc_options.anim_params.loop_count =
-    (opts->loop() ? 0:  // 0 = infinite
-                    1); // 1 = loop once
+  enc_options.anim_params.loop_count = (opts->loop() ? 0 : // 0 = infinite
+                                                       1);              // 1 = loop once
 
   ImageRef image(Image::create(IMAGE_RGB, w, h));
 
-  WriterData wd(fp, fop, 0, totalFrames, 0.0);
+  const doc::frame_t totalFrames = fop->roi().frames();
+  WriterData wd(fp, fop, totalFrames);
   WebPPicture pic;
   WebPPictureInit(&pic);
   pic.width = w;
   pic.height = h;
   pic.use_argb = true;
   pic.argb = (uint32_t*)image->getPixelAddress(0, 0);
-  pic.argb_stride = w;
+  pic.argb_stride = image->rowPixels(); // Stride in pixels (not bytes)
   pic.user_data = &wd;
   pic.progress_hook = progress_report;
 
   WebPAnimEncoder* enc = WebPAnimEncoderNew(w, h, &enc_options);
   int timestamp_ms = 0;
-  for (frame_t f=0; f<totalFrames; ++f) {
+  for (frame_t frame : fop->roi().framesSequence()) {
     // Render the frame in the bitmap
     clear_image(image.get(), image->maskColor());
-    sprite->renderFrame(f, image.get());
+    sprite->renderFrame(frame, fop->roi().frameBounds(frame), image.get());
 
     // Switch R <-> B channels because WebPAnimEncoderAssemble()
     // expects MODE_BGRA pictures.
@@ -336,15 +323,15 @@ bool WebPFormat::onSave(FileOp* fop)
 
     if (!WebPAnimEncoderAdd(enc, &pic, timestamp_ms, &config)) {
       if (!fop->isStop()) {
-        fop->setError("Error saving frame %d info\n", f);
+        fop->setError("Error saving frame %d info\n", frame);
         return false;
       }
       else
         return true;
     }
-    timestamp_ms += sprite->frameDuration(f);
+    timestamp_ms += sprite->frameDuration(frame);
 
-    wd.f = f;
+    wd.f++;
   }
   WebPAnimEncoderAdd(enc, nullptr, timestamp_ms, nullptr);
 
@@ -362,13 +349,12 @@ bool WebPFormat::onSave(FileOp* fop)
   return true;
 }
 
-#endif  // ENABLE_SAVE
+#endif // ENABLE_SAVE
 
 // Shows the WebP configuration dialog.
 FormatOptionsPtr WebPFormat::onAskUserForFormatOptions(FileOp* fop)
 {
   auto opts = fop->formatOptionsOfDocument<WebPOptions>();
-#ifdef ENABLE_UI
   if (fop->context() && fop->context()->isUIAvailable()) {
     try {
       auto& pref = Preferences::instance();
@@ -381,28 +367,30 @@ FormatOptionsPtr WebPFormat::onAskUserForFormatOptions(FileOp* fop)
 
       switch (opts->type()) {
         case WebPOptions::Lossless:
-          if (pref.isSet(pref.webp.compression)) opts->setCompression(pref.webp.compression());
-          if (pref.isSet(pref.webp.imageHint))   opts->setImageHint(WebPImageHint(pref.webp.imageHint()));
+          if (pref.isSet(pref.webp.compression))
+            opts->setCompression(pref.webp.compression());
+          if (pref.isSet(pref.webp.imageHint))
+            opts->setImageHint(WebPImageHint(pref.webp.imageHint()));
           break;
         case WebPOptions::Lossy:
-          if (pref.isSet(pref.webp.quality))     opts->setQuality(pref.webp.quality());
-          if (pref.isSet(pref.webp.imagePreset)) opts->setImagePreset(WebPPreset(pref.webp.imagePreset()));
+          if (pref.isSet(pref.webp.quality))
+            opts->setQuality(pref.webp.quality());
+          if (pref.isSet(pref.webp.imagePreset))
+            opts->setImagePreset(WebPPreset(pref.webp.imagePreset()));
           break;
       }
 
       if (pref.webp.showAlert()) {
         app::gen::WebpOptions win;
 
-        auto updatePanels = [&win, &opts]{
+        auto updatePanels = [&win, &opts] {
           int o = base::convert_to<int>(win.type()->getValue());
           opts->setType(WebPOptions::Type(o));
           win.losslessOptions()->setVisible(o == int(WebPOptions::Lossless));
           win.lossyOptions()->setVisible(o == int(WebPOptions::Lossy));
 
           auto rc = win.bounds();
-          win.setBounds(
-            gfx::Rect(rc.origin(),
-                      win.sizeHint()));
+          win.setBounds(gfx::Rect(rc.origin(), win.sizeHint()));
 
           auto manager = win.manager();
           if (manager)
@@ -429,6 +417,7 @@ FormatOptionsPtr WebPFormat::onAskUserForFormatOptions(FileOp* fop)
           pref.webp.imageHint(base::convert_to<int>(win.imageHint()->getValue()));
           pref.webp.quality(win.quality()->getValue());
           pref.webp.imagePreset(base::convert_to<int>(win.imagePreset()->getValue()));
+          pref.webp.showAlert(!win.dontShow()->isSelected());
 
           opts->setLoop(pref.webp.loop());
           opts->setType(WebPOptions::Type(pref.webp.type()));
@@ -453,7 +442,6 @@ FormatOptionsPtr WebPFormat::onAskUserForFormatOptions(FileOp* fop)
       return std::shared_ptr<WebPOptions>(nullptr);
     }
   }
-#endif // ENABLE_UI
   return opts;
 }
 

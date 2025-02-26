@@ -1,4 +1,4 @@
--- Copyright (C) 2019-2021  Igara Studio S.A.
+-- Copyright (C) 2019-2024  Igara Studio S.A.
 --
 -- This file is released under the terms of the MIT license.
 -- Read LICENSE.txt for more information.
@@ -196,6 +196,79 @@ do
 end
 
 ----------------------------------------------------------------------
+-- Tests of get/set app.fgTile and app.bgTile
+----------------------------------------------------------------------
+
+do
+  local spr = Sprite(32, 32, ColorMode.INDEXED)
+  spr.gridBounds = Rectangle{ 0, 0, 2, 2 }
+  assert(spr.layers[1].isImage)
+  assert(not spr.layers[1].isTilemap)
+
+  ----------------------------------------------------------------------
+  -- Create a tilemap
+  ----------------------------------------------------------------------
+
+  app.command.NewLayer{ tilemap=true }
+  assert(#spr.layers == 2)
+  app.layer = spr.layers[2]
+  assert(app.layer.isImage)
+  assert(app.layer.isTilemap)
+  assert(#app.layer.cels == 0)
+
+  ----------------------------------------------------------------------
+  -- Draw something on the tilemap so new tiles are created
+  ----------------------------------------------------------------------
+
+  app.useTool{
+    tool='pencil',
+    color=1,
+    tilesetMode=TilesetMode.STACK,
+    points={ Point(2, 0), Point(4, 0), Point(5,1) }
+  }
+  assert(#app.layer.cels == 1)
+  assert(app.layer:cel(1).image.colorMode == ColorMode.TILEMAP)
+  local tilemapCel = app.layer:cel(1)
+  assert(tilemapCel.bounds == Rectangle(2, 0, 4, 2))
+  assert(#spr.layers[2].tileset == 3)
+
+  app.fgTile = 1
+  app.useTool{
+    tool='pencil',
+    tilemapMode=TilemapMode.TILES,
+    points={ Point(0, 0), Point(5, 0)}
+  }
+
+  app.fgTile = 2
+  app.useTool{
+    tool='pencil',
+    tilemapMode=TilemapMode.TILES,
+    points={ Point(0, 2), Point(5, 2)}
+  }
+
+  local cel = spr.layers[2].cels[1]
+  expect_img(cel.image, { 1,1,1,
+                          2,2,2 })
+
+  app.fgTile = 0
+  app.useTool{
+    tool='pencil',
+    tilemapMode=TilemapMode.TILES,
+    points={ Point(0, 0), Point(4, 0),
+             Point(4, 2), Point(0, 2)}
+  }
+
+  local cel = spr.layers[2].cels[1]
+  assert(cel == nil)
+  local tileImg1 = spr.layers[2].tileset:tile(1).image
+  expect_img(tileImg1, { 1,1,
+                         0,0 })
+  local tileImg2 = spr.layers[2].tileset:tile(2).image
+  expect_img(tileImg2, { 1,0,
+                         0,1 })
+end
+
+----------------------------------------------------------------------
 -- Tests drawing in the tilemap with tiles
 ----------------------------------------------------------------------
 
@@ -215,7 +288,7 @@ do
   app.useTool{
     tool='pencil',
     color=Color{ r=0, g=0, b=0 },
-    tilemapMode=TilesetMode.PIXELS,
+    tilemapMode=TilemapMode.PIXELS,
     tilesetMode=TilesetMode.STACK,
     points={ Point(0, 0), Point(31, 31) }}
 
@@ -228,7 +301,7 @@ do
 
   app.useTool{
     tool='pencil',
-    color=Color{ index=1 },
+    color=Color{ index=1 }, -- We can use a Color{ index } to paint tiles too
     tilemapMode=TilemapMode.TILES,
     tilesetMode=TilesetMode.STACK,
     points={ Point(0, 16) }} -- y=16 is the first pixel of 3rd row of tiles
@@ -240,7 +313,7 @@ do
 
   app.useTool{
     tool='pencil',
-    color=Color{ index=1 },
+    color=Color{ tile=1 }, -- Color{ tile } is the new constructor to paint tiles + flags
     tilemapMode=TilemapMode.TILES,
     tilesetMode=TilesetMode.STACK,
     points={ Point(0, 0), Point(16, 0) }} -- x=16 is the first pixel of 3rd column of tiles
@@ -255,7 +328,7 @@ do
   expect_eq(Point{ 10, 8 }, cel.position)
   app.useTool{
     tool='pencil',
-    color=Color{ index=0 },
+    color=Color{ tile=0 },
     tilemapMode=TilemapMode.TILES,
     tilesetMode=TilesetMode.STACK,
     points={ { 10, 8 }, { 18, 16 } }} -- {10,8} is the first existent tile in the tilemap
@@ -268,7 +341,7 @@ do
 
   app.useTool{
     tool='pencil',
-    color=Color{ index=1 },
+    color=Color{ tile=1 },
     tilemapMode=TilemapMode.TILES,
     tilesetMode=TilesetMode.STACK,
     points={ Point(1, 7), Point(2, 8) }} -- Tile 0,0 and 1,1
@@ -539,7 +612,7 @@ do
   app.useTool{
     tool='pencil',
     color=Color{ r=0, g=0, b=0, a=255 },
-    tilemapMode=TilesetMode.PIXELS,
+    tilemapMode=TilemapMode.PIXELS,
     tilesetMode=TilesetMode.STACK,
     points={ Point(0, 0), Point(3, 0) }}
 
@@ -548,7 +621,7 @@ do
   app.useTool{
     tool='pencil',
     color=Color{ r=255, g=0, b=0, a=0 },
-    tilemapMode=TilesetMode.PIXELS,
+    tilemapMode=TilemapMode.PIXELS,
     tilesetMode=TilesetMode.STACK,
     points={ Point(0, 0), Point(1, 0) }}
 
@@ -1116,4 +1189,213 @@ do
   expect_eq(app.activeLayer.cels[1].position, Point(4, 3))
   expect_eq(app.activeLayer.cels[1].image.width, 1) -- width in tilemap terms
   expect_eq(app.activeLayer.cels[1].image.height, 2) -- height in tilemap terms
+end
+
+----------------------------------------------------------------------
+-- Tests removal of unused tilesets when deleting tilemaps
+----------------------------------------------------------------------
+
+do
+  local spr = Sprite(32, 32, ColorMode.INDEXED)
+  assert(spr.layers[1].isImage)
+  assert(not spr.layers[1].isTilemap)
+
+  -- Create some tilemaps
+  app.command.NewLayer{ tilemap=true }
+  assert(#spr.layers == 2)
+  local tilemapLay1 = spr.layers[2]
+  assert(tilemapLay1.isImage)
+  assert(tilemapLay1.isTilemap)
+  assert(#spr.tilesets == 1)
+  assert(spr.tilesets[1] == tilemapLay1.tileset)
+
+  app.command.NewLayer{ tilemap=true }
+  assert(#spr.layers == 3)
+  local tilemapLay2 = spr.layers[3]
+  assert(tilemapLay2.isImage)
+  assert(tilemapLay2.isTilemap)
+  assert(#spr.tilesets == 2)
+  assert(spr.tilesets[2] == tilemapLay2.tileset)
+
+  app.command.NewLayer{ tilemap=true }
+  assert(#spr.layers == 4)
+  local tilemapLay3 = spr.layers[4]
+  assert(tilemapLay3.isImage)
+  assert(tilemapLay3.isTilemap)
+  assert(#spr.tilesets == 3)
+  assert(spr.tilesets[3] == tilemapLay3.tileset)
+
+  -- Remove tilemap 2 and check that a tilemap was removed and
+  -- tilesets of remaining tilemaps are correct.
+  app.range.layers = { tilemapLay2 }
+  app.command.RemoveLayer()
+  assert(#spr.layers == 3)
+  assert(#spr.tilesets == 2)
+  assert(spr.tilesets[1] == tilemapLay1.tileset)
+  assert(spr.tilesets[2] == tilemapLay3.tileset)
+
+  -- Undo tilemap removal and check that it goes back to
+  -- previous state.
+  app.undo()
+
+  assert(#spr.layers == 4)
+  assert(#spr.tilesets == 3)
+  assert(spr.tilesets[1] == tilemapLay1.tileset)
+  assert(spr.tilesets[2] == tilemapLay2.tileset)
+  assert(spr.tilesets[3] == tilemapLay3.tileset)
+
+  -- Try removing 2 tilemaps now
+  app.range.layers = { tilemapLay1, tilemapLay2 }
+  app.command.RemoveLayer()
+  assert(#spr.layers == 2)
+  assert(#spr.tilesets == 1)
+  assert(spr.tilesets[1] == tilemapLay3.tileset)
+
+  app.undo()
+
+  assert(#spr.layers == 4)
+  assert(#spr.tilesets == 3)
+  assert(spr.tilesets[1] == tilemapLay1.tileset)
+  assert(spr.tilesets[2] == tilemapLay2.tileset)
+  assert(spr.tilesets[3] == tilemapLay3.tileset)
+
+  -- Assign same tileset to tilemap 1 and tilemap 3.
+  local oldTilemapLay3Tileset = tilemapLay3.tileset
+  tilemapLay3.tileset = tilemapLay1.tileset
+  -- We have to manually delete tilemap 3 tileset because
+  -- assigning a different tileset doesn't check for/remove
+  -- unused tilesets (TODO: should we add this?)
+  spr:deleteTileset(oldTilemapLay3Tileset)
+
+  assert(#spr.tilesets == 2)
+  assert(spr.tilesets[1] == tilemapLay1.tileset)
+  assert(spr.tilesets[2] == tilemapLay2.tileset)
+  assert(spr.tilesets[1] == tilemapLay3.tileset)
+
+  -- Remove tilemap 1 and check that no tileset was removed.
+  app.range.layers = { tilemapLay1 }
+  app.command.RemoveLayer()
+  assert(#spr.layers == 3)
+  assert(#spr.tilesets == 2)
+  assert(spr.tilesets[2] == tilemapLay2.tileset)
+  assert(spr.tilesets[1] == tilemapLay3.tileset)
+
+  -- Remove tilemap 3 and check that the tileset was removed now.
+  app.range.layers = { tilemapLay3 }
+  app.command.RemoveLayer()
+  assert(#spr.layers == 2)
+  assert(#spr.tilesets == 1)
+  assert(spr.tilesets[1] == tilemapLay2.tileset)
+
+  -- Undo all
+  app.undo()
+  app.undo()
+  app.undo()
+  -- Manually re-assign its tileset to tilemap 3.
+  tilemapLay3.tileset = spr.tilesets[3]
+
+  assert(#spr.layers == 4)
+  assert(#spr.tilesets == 3)
+  assert(spr.tilesets[1] == tilemapLay1.tileset)
+  assert(spr.tilesets[2] == tilemapLay2.tileset)
+  assert(spr.tilesets[3] == tilemapLay3.tileset)
+end
+
+-----------------------------------------------------------------------
+-- Test tilemaps with flags (flips)
+-----------------------------------------------------------------------
+
+do
+  local spr = Sprite(8, 8, ColorMode.INDEXED)
+
+  -- Create a new tilemap (delete the default regular layer)
+  app.command.NewLayer{ tilemap=true, gridBounds=Rectangle{ 0, 0, 2, 2 } }
+  local mapLay = app.layer
+  spr:deleteLayer(spr.layers[1])
+  assert(#mapLay.cels == 0)
+
+  -- Set a palette just for testing/preview the result
+  spr:setPalette(Palette{ fromResource="Teletext" })
+
+  -- Create one tile with these pixels (indexes):
+  -- 12
+  -- 34
+  local tile = spr:newTile(mapLay.tileset, 1)
+  array_to_pixels({ 1, 2,
+                    3, 4 }, tile.image)
+
+  -- Fill the tilemap with this only tile
+  app.useTool{ tool='paint_bucket', color=1, layer=mapLay,
+               tilemapMode=TilemapMode.TILES,
+               points={ Point(0, 0) }}
+
+  assert(#mapLay.cels == 1)
+  local map = mapLay.cels[1].image
+  assert(map.width == 4)
+  assert(map.height == 4)
+
+  -- Constants
+  local x = app.pixelColor.TILE_XFLIP
+  local y = app.pixelColor.TILE_YFLIP
+  local d = app.pixelColor.TILE_DFLIP
+
+  -- Normal (tile without flags)
+  -- 12
+  -- 34
+  map:drawPixel(0, 0, 1)
+
+  -- Flip X
+  -- 21
+  -- 43
+  map:drawPixel(1, 0, 1|x)
+
+  -- Flip Y
+  -- 34
+  -- 12
+  map:drawPixel(0, 1, 1|y)
+
+  -- Flip X+Y
+  -- 43
+  -- 21
+  map:drawPixel(1, 1, 1|x|y)
+
+  -- Flip D
+  -- 31
+  -- 42
+  map:drawPixel(2, 2, 1|d)
+
+  -- Flip X+D
+  -- 42
+  -- 31
+  map:drawPixel(3, 2, 1|x|d)
+
+  -- Flip Y+D
+  -- 13
+  -- 24
+  map:drawPixel(2, 3, 1|y|d)
+
+  -- Flip X+Y+D
+  -- 24
+  -- 13
+  map:drawPixel(3, 3, 1|x|y|d)
+
+  -- Clear areas
+  app.useTool{ tool='filled_rectangle', color=0, layer=mapLay,
+               tilemapMode=TilemapMode.TILES,
+               points={ Point(0, 4), Point(3, 7) }}
+  app.useTool{ tool='filled_rectangle', color=0, layer=mapLay,
+               tilemapMode=TilemapMode.TILES,
+               points={ Point(4, 0), Point(7, 3) }}
+
+  -- Save, load, and test if the tilemap were saved correctly with the
+  -- given flags
+  spr:saveAs('_test_tile_flags.aseprite')
+  spr:close()
+
+  local spr2 = app.open('_test_tile_flags.aseprite')
+  local map2 = spr2.layers[1].cels[1].image
+  expect_img(map2, { 1,   (1|x),   0,     0,
+                     1|y, (1|x|y), 0,     0,
+                     0,   0,     1|d,   (1|x|d),
+                     0,   0,     1|y|d, (1|x|y|d) })
 end

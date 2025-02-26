@@ -12,6 +12,7 @@
 *.res
 .DS_Store
 .vs
-
-# CMake output
+tests/_test*
 build
+.build
+CMakeSettings.json

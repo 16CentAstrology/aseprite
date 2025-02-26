@@ -1,12 +1,12 @@
 // Aseprite
-// Copyright (C) 2022  Igara Studio S.A.
+// Copyright (C) 2022-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/doc_undo.h"
@@ -14,10 +14,12 @@
 #include "app/app.h"
 #include "app/cmd.h"
 #include "app/cmd_transaction.h"
+#include "app/console.h"
 #include "app/context.h"
 #include "app/doc_undo_observer.h"
 #include "app/pref/preferences.h"
 #include "base/mem_utils.h"
+#include "base/scoped_value.h"
 #include "undo/undo_history.h"
 #include "undo/undo_state.h"
 
@@ -29,8 +31,7 @@
 
 namespace app {
 
-DocUndo::DocUndo()
-  : m_undoHistory(this)
+DocUndo::DocUndo() : m_undoHistory(this)
 {
 }
 
@@ -42,14 +43,19 @@ void DocUndo::setContext(Context* ctx)
 void DocUndo::add(CmdTransaction* cmd)
 {
   ASSERT(cmd);
+
+  if (m_undoing) {
+    delete cmd;
+    throw CannotModifyWhenUndoingException();
+  }
+
   UNDO_TRACE("UNDO: Add state <%s> of %s to %s\n",
              cmd->label().c_str(),
              base::get_pretty_memory_size(cmd->memSize()).c_str(),
              base::get_pretty_memory_size(m_totalUndoSize).c_str());
 
   // A linear undo history is the default behavior
-  if (!App::instance() ||
-      !App::instance()->preferences().undo.allowNonlinearHistory()) {
+  if (!App::instance() || !App::instance()->preferences().undo.allowNonlinearHistory()) {
     clearRedo();
   }
 
@@ -60,28 +66,23 @@ void DocUndo::add(CmdTransaction* cmd)
   notify_observers(&DocUndoObserver::onTotalUndoSizeChange, this);
 
   if (App::instance()) {
-    const size_t undoLimitSize =
-      int(App::instance()->preferences().undo.sizeLimit())
-      * 1024 * 1024;
+    const size_t undoLimitSize = int(App::instance()->preferences().undo.sizeLimit()) * 1024 * 1024;
 
     // If undo limit is 0, it means "no limit", so we ignore the
     // complete logic to discard undo states.
-    if (undoLimitSize > 0 &&
-        m_totalUndoSize > undoLimitSize) {
+    if (undoLimitSize > 0 && m_totalUndoSize > undoLimitSize) {
       UNDO_TRACE("UNDO: Reducing undo history from %s to %s\n",
                  base::get_pretty_memory_size(m_totalUndoSize).c_str(),
                  base::get_pretty_memory_size(undoLimitSize).c_str());
 
-      while (m_undoHistory.firstState() &&
-             m_totalUndoSize > undoLimitSize) {
+      while (m_undoHistory.firstState() && m_totalUndoSize > undoLimitSize) {
         if (!m_undoHistory.deleteFirstState())
           break;
       }
     }
   }
 
-  UNDO_TRACE("UNDO: New undo size %s\n",
-             base::get_pretty_memory_size(m_totalUndoSize).c_str());
+  UNDO_TRACE("UNDO: New undo size %s\n", base::get_pretty_memory_size(m_totalUndoSize).c_str());
 }
 
 bool DocUndo::canUndo() const
@@ -96,6 +97,8 @@ bool DocUndo::canRedo() const
 
 void DocUndo::undo()
 {
+  ASSERT(!m_undoing);
+  base::ScopedValue undoing(m_undoing, true);
   const size_t oldSize = m_totalUndoSize;
   {
     const undo::UndoState* state = nextUndo();
@@ -116,6 +119,8 @@ void DocUndo::undo()
 
 void DocUndo::redo()
 {
+  ASSERT(!m_undoing);
+  base::ScopedValue undoing(m_undoing, true);
   const size_t oldSize = m_totalUndoSize;
   {
     const undo::UndoState* state = nextRedo();
@@ -173,7 +178,7 @@ bool DocUndo::isInSavedStateOrSimilar() const
     return true;
 
   // Now we try with redoes.
-  state = (currentState() ? currentState()->next(): firstState());
+  state = (currentState() ? currentState()->next() : firstState());
   while (state) {
     if (STATE_CMD(state)->doesChangeSavedState()) {
       return false;
@@ -266,6 +271,9 @@ Cmd* DocUndo::lastExecutedCmd() const
 
 void DocUndo::moveToState(const undo::UndoState* state)
 {
+  ASSERT(!m_undoing);
+  base::ScopedValue undoing(m_undoing, true);
+
   m_undoHistory.moveTo(state);
 
   // After onCurrentUndoStateChange don't use the "state" argument, it

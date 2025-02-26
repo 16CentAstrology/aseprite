@@ -1,15 +1,16 @@
 // Aseprite
-// Copyright (C) 2022  Igara Studio S.A.
+// Copyright (C) 2022-2023  Igara Studio S.A.
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/ui/sampling_selector.h"
 
+#include "app/i18n/strings.h"
 #include "ui/listitem.h"
 
 namespace app {
@@ -18,24 +19,22 @@ using namespace ui;
 
 SamplingSelector::SamplingSelector(Behavior behavior)
   : m_behavior(behavior)
-  , m_downsamplingLabel("Downsampling:")
+  , m_downsamplingLabel(Strings::downsampling_label())
 {
   addChild(&m_downsamplingLabel);
   addChild(&m_downsampling);
 
-  m_downsampling.addItem(new ListItem("Nearest"));
-  m_downsampling.addItem(new ListItem("Bilinear"));
-  m_downsampling.addItem(new ListItem("Bilinear mipmapping"));
-  m_downsampling.addItem(new ListItem("Trilinear mipmapping"));
-  m_downsampling.setSelectedItemIndex(
-    (int)Preferences::instance().editor.downsampling());
+  m_downsampling.addItem(new ListItem(Strings::downsampling_nearest()));
+  m_downsampling.addItem(new ListItem(Strings::downsampling_bilinear()));
+  m_downsampling.addItem(new ListItem(Strings::downsampling_bilinear_mipmap()));
+  m_downsampling.addItem(new ListItem(Strings::downsampling_trilinear_mipmap()));
+  m_downsampling.setSelectedItemIndex((int)Preferences::instance().editor.downsampling());
 
   if (m_behavior == Behavior::ChangeOnRealTime)
-    m_downsampling.Change.connect([this]{ save(); });
+    m_downsampling.Change.connect([this] { save(); });
 
-  m_samplingChangeConn =
-    Preferences::instance().editor.downsampling.AfterChange.connect(
-      [this]{ onPreferenceChange(); });
+  m_samplingChangeConn = Preferences::instance().editor.downsampling.AfterChange.connect(
+    [this] { onPreferenceChange(); });
 }
 
 void SamplingSelector::save()

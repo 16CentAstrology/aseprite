@@ -1,5 +1,5 @@
 // Aseprite Document Library
-// Copyright (c) 2022 Igara Studio S.A.
+// Copyright (c) 2022-2024 Igara Studio S.A.
 // Copyright (c) 2016-2018 David Capello
 //
 // This file is released under the terms of the MIT license.
@@ -9,173 +9,57 @@
 #define DOC_SELECTED_FRAMES_H_INCLUDED
 #pragma once
 
-#include "doc/frame_range.h"
-
-#include <iosfwd>
-#include <vector>
+#include "doc/frames_iterators.h"
 
 namespace doc {
 
-  class SelectedFrames {
-    typedef std::vector<FrameRange> Ranges;
+// The FramesSequence class is based in several code of this class.
+// TODO: At some point we should remove the duplicated code between these
+// classes.
+class SelectedFrames {
+public:
+  frames::const_iterator begin() const { return frames::const_iterator(m_ranges.begin()); }
+  frames::const_iterator end() const { return frames::const_iterator(m_ranges.end()); }
+  frames::const_reverse_iterator rbegin() const
+  {
+    return frames::const_reverse_iterator(m_ranges.rbegin());
+  }
+  frames::const_reverse_iterator rend() const
+  {
+    return frames::const_reverse_iterator(m_ranges.rend());
+  }
 
-  public:
-    class const_iterator {
-      static const int kNullFrame = -2;
-    public:
-      using iterator_category = std::forward_iterator_tag;
-      using value_type = frame_t;
-      using difference_type = std::ptrdiff_t;
-      using pointer = frame_t*;
-      using reference = frame_t&;
+  std::size_t size() const;
+  std::size_t ranges() const { return m_ranges.size(); }
+  bool empty() const { return m_ranges.empty(); }
 
-      const_iterator(const Ranges::const_iterator& it)
-        : m_it(it), m_frame(kNullFrame) {
-      }
+  void clear();
+  void insert(frame_t frame);
+  void insert(frame_t fromFrame, frame_t toFrame);
+  SelectedFrames filter(frame_t fromFrame, frame_t toFrame) const;
 
-      const_iterator& operator++() {
-        if (m_frame == kNullFrame)
-          m_frame = m_it->fromFrame;
+  bool contains(frame_t frame) const;
 
-        if (m_it->fromFrame <= m_it->toFrame) {
-          if (m_frame < m_it->toFrame)
-            ++m_frame;
-          else {
-            m_frame = kNullFrame;
-            ++m_it;
-          }
-        }
-        else {
-          if (m_frame > m_it->toFrame)
-            --m_frame;
-          else {
-            m_frame = kNullFrame;
-            ++m_it;
-          }
-        }
+  frame_t firstFrame() const { return (!m_ranges.empty() ? m_ranges.front().fromFrame : -1); }
+  frame_t lastFrame() const { return (!m_ranges.empty() ? m_ranges.back().toFrame : -1); }
 
-        return *this;
-      }
+  void displace(frame_t frameDelta);
+  frames::Reversed<SelectedFrames> reversed() const { return frames::Reversed(*this); }
 
-      frame_t operator*() const {
-        if (m_frame == kNullFrame)
-          m_frame = m_it->fromFrame;
-        return m_frame;
-      }
+  SelectedFrames makeReverse() const;
+  SelectedFrames makePingPong() const;
 
-      bool operator==(const const_iterator& o) const {
-        return (m_it == o.m_it && m_frame == o.m_frame);
-      }
+  bool operator==(const SelectedFrames& o) const { return m_ranges == o.m_ranges; }
 
-      bool operator!=(const const_iterator& it) const {
-        return !operator==(it);
-      }
+  bool operator!=(const SelectedFrames& o) const { return !operator==(o); }
 
-    private:
-      mutable Ranges::const_iterator m_it;
-      mutable frame_t m_frame;
-    };
+  bool write(std::ostream& os) const;
+  bool read(std::istream& is);
 
-    class const_reverse_iterator {
-    public:
-      using iterator_category = std::forward_iterator_tag;
-      using value_type = frame_t;
-      using difference_type = std::ptrdiff_t;
-      using pointer = frame_t*;
-      using reference = frame_t&;
-
-      const_reverse_iterator(const Ranges::const_reverse_iterator& it)
-        : m_it(it), m_frame(-1) {
-      }
-
-      const_reverse_iterator& operator++() {
-        if (m_frame < 0)
-          m_frame = m_it->toFrame;
-
-        if (m_frame > m_it->fromFrame)
-          --m_frame;
-        else {
-          m_frame = -1;
-          ++m_it;
-        }
-
-        return *this;
-      }
-
-      frame_t operator*() const {
-        if (m_frame < 0)
-          m_frame = m_it->toFrame;
-        return m_frame;
-      }
-
-      bool operator==(const const_reverse_iterator& o) const {
-        return (m_it == o.m_it && m_frame == o.m_frame);
-      }
-
-      bool operator!=(const const_reverse_iterator& it) const {
-        return !operator==(it);
-      }
-
-    private:
-      mutable Ranges::const_reverse_iterator m_it;
-      mutable frame_t m_frame;
-    };
-
-    class Reversed {
-    public:
-      typedef const_reverse_iterator const_iterator;
-
-      const_iterator begin() const { return m_selectedFrames.rbegin(); }
-      const_iterator end() const { return m_selectedFrames.rend(); }
-
-      Reversed(const SelectedFrames& selectedFrames)
-        : m_selectedFrames(selectedFrames) {
-      }
-
-    private:
-      const SelectedFrames& m_selectedFrames;
-    };
-
-    const_iterator begin() const { return const_iterator(m_ranges.begin()); }
-    const_iterator end() const { return const_iterator(m_ranges.end()); }
-    const_reverse_iterator rbegin() const { return const_reverse_iterator(m_ranges.rbegin()); }
-    const_reverse_iterator rend() const { return const_reverse_iterator(m_ranges.rend()); }
-
-    std::size_t size() const;
-    std::size_t ranges() const { return m_ranges.size(); }
-    bool empty() const { return m_ranges.empty(); }
-
-    void clear();
-    void insert(frame_t frame);
-    void insert(frame_t fromFrame, frame_t toFrame);
-    SelectedFrames filter(frame_t fromFrame, frame_t toFrame) const;
-
-    bool contains(frame_t frame) const;
-
-    frame_t firstFrame() const { return (!m_ranges.empty() ? m_ranges.front().fromFrame: -1); }
-    frame_t lastFrame() const { return (!m_ranges.empty() ? m_ranges.back().toFrame: -1); }
-
-    void displace(frame_t frameDelta);
-    Reversed reversed() const { return Reversed(*this); }
-
-    SelectedFrames makeReverse() const;
-    SelectedFrames makePingPong() const;
-
-    bool operator==(const SelectedFrames& o) const {
-      return m_ranges == o.m_ranges;
-    }
-
-    bool operator!=(const SelectedFrames& o) const {
-      return !operator==(o);
-    }
-
-    bool write(std::ostream& os) const;
-    bool read(std::istream& is);
-
-  private:
-    Ranges m_ranges;
-  };
+private:
+  frames::Ranges m_ranges;
+};
 
 } // namespace doc
 
-#endif  // DOC_SELECTED_FRAMES_H_INCLUDED
+#endif // DOC_SELECTED_FRAMES_H_INCLUDED

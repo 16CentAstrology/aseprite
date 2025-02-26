@@ -1,12 +1,12 @@
 // Aseprite UI Library
-// Copyright (C) 2019-2022  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2001-2016  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "ui/slider.h"
@@ -24,29 +24,36 @@
 
 namespace ui {
 
-static int slider_press_x;
-static int slider_press_value;
-static bool slider_press_left;
+int Slider::slider_press_x;
+int Slider::slider_press_value;
+bool Slider::slider_press_left;
 
 Slider::Slider(int min, int max, int value, SliderDelegate* delegate)
   : Widget(kSliderWidget)
-  , m_min(min)
-  , m_max(max)
-  , m_value(std::clamp(value, min, max))
+  , m_value(value)
   , m_readOnly(false)
   , m_delegate(delegate)
 {
+  enforceValidRange(min, max);
   setFocusStop(true);
   initTheme();
 }
 
 void Slider::setRange(int min, int max)
 {
+  enforceValidRange(min, max);
+  invalidate();
+}
+
+void Slider::enforceValidRange(int min, int max)
+{
+  // Do not allow min > max
+  if (min > max)
+    max = min;
+
   m_min = min;
   m_max = max;
   m_value = std::clamp(m_value, min, max);
-
-  invalidate();
 }
 
 void Slider::setValue(int value)
@@ -63,9 +70,17 @@ void Slider::setValue(int value)
 
 void Slider::getSliderThemeInfo(int* min, int* max, int* value) const
 {
-  if (min) *min = m_min;
-  if (max) *max = m_max;
-  if (value) *value = m_value;
+  if (min)
+    *min = m_min;
+  if (max)
+    *max = m_max;
+  if (value)
+    *value = m_value;
+}
+
+void Slider::updateValue(int value)
+{
+  setValue(value);
 }
 
 std::string Slider::convertValueToText(int value) const
@@ -74,7 +89,7 @@ std::string Slider::convertValueToText(int value) const
     return m_delegate->onGetTextFromValue(value);
   else {
     char buf[128];
-    std::sprintf(buf, "%d", value);
+    std::snprintf(buf, sizeof(buf), "%d", value);
     return buf;
   }
 }
@@ -91,7 +106,6 @@ int Slider::convertTextToValue(const std::string& text) const
 bool Slider::onProcessMessage(Message* msg)
 {
   switch (msg->type()) {
-
     case kFocusEnterMessage:
     case kFocusLeaveMessage:
       if (isEnabled())
@@ -106,9 +120,11 @@ bool Slider::onProcessMessage(Message* msg)
       captureMouse();
 
       {
+        int value;
+        getSliderThemeInfo(nullptr, nullptr, &value);
         gfx::Point mousePos = static_cast<MouseMessage*>(msg)->position();
         slider_press_x = mousePos.x;
-        slider_press_value = m_value;
+        slider_press_value = value;
         slider_press_left = static_cast<MouseMessage*>(msg)->left();
       }
 
@@ -118,27 +134,32 @@ bool Slider::onProcessMessage(Message* msg)
 
     case kMouseMoveMessage:
       if (hasCapture()) {
-        int value, accuracy, range;
+        int min, max, value, range;
         gfx::Rect rc = childrenBounds();
         gfx::Point mousePos = static_cast<MouseMessage*>(msg)->positionForDisplay(display());
 
-        range = m_max - m_min + 1;
+        getSliderThemeInfo(&min, &max, &value);
+
+        range = max - min + 1;
 
         // With left click
         if (slider_press_left) {
-          value = m_min + range * (mousePos.x - rc.x) / rc.w;
+          value = min + range * (mousePos.x - rc.x) / rc.w;
         }
         // With right click
         else {
-          accuracy = std::clamp(rc.w / range, 1, rc.w);
+          int w = rc.w;
+          if (rc.w == 0 || range > rc.w) {
+            w = 1;
+            range = 1;
+          }
 
-          value = slider_press_value +
-            (mousePos.x - slider_press_x) / accuracy;
+          value = slider_press_value + (mousePos.x - slider_press_x) * range / w;
         }
 
-        value = std::clamp(value, m_min, m_max);
-        if (m_value != value) {
-          setValue(value);
+        value = std::clamp(value, min, max);
+        if (getValue() != value) {
+          updateValue(value);
           onChange();
         }
 
@@ -165,22 +186,23 @@ bool Slider::onProcessMessage(Message* msg)
 
     case kKeyDownMessage:
       if (hasFocus() && !isReadOnly()) {
-        int value = m_value;
+        int min, max, value, oldValue;
+        getSliderThemeInfo(&min, &max, &value);
+        oldValue = value;
 
         switch (static_cast<KeyMessage*>(msg)->scancode()) {
           case kKeyLeft:     --value; break;
           case kKeyRight:    ++value; break;
-          case kKeyPageDown: value -= (m_max-m_min+1)/4; break;
-          case kKeyPageUp:   value += (m_max-m_min+1)/4; break;
-          case kKeyHome:     value = m_min; break;
-          case kKeyEnd:      value = m_max; break;
-          default:
-            goto not_used;
+          case kKeyPageDown: value -= (max - min + 1) / 4; break;
+          case kKeyPageUp:   value += (max - min + 1) / 4; break;
+          case kKeyHome:     value = min; break;
+          case kKeyEnd:      value = max; break;
+          default:           goto not_used;
         }
 
-        value = std::clamp(value, m_min, m_max);
-        if (m_value != value) {
-          setValue(value);
+        value = std::clamp(value, min, max);
+        if (oldValue != value) {
+          updateValue(value);
           onChange();
         }
 
@@ -190,23 +212,20 @@ bool Slider::onProcessMessage(Message* msg)
 
     case kMouseWheelMessage:
       if (isEnabled() && !isReadOnly()) {
-        int value = m_value
-          + static_cast<MouseMessage*>(msg)->wheelDelta().x
-          - static_cast<MouseMessage*>(msg)->wheelDelta().y;
+        int value = m_value + static_cast<MouseMessage*>(msg)->wheelDelta().x -
+                    static_cast<MouseMessage*>(msg)->wheelDelta().y;
 
         value = std::clamp(value, m_min, m_max);
 
         if (m_value != value) {
-          this->setValue(value);
+          setValue(value);
           onChange();
         }
         return true;
       }
       break;
 
-    case kSetCursorMessage:
-      setupSliderCursor();
-      return true;
+    case kSetCursorMessage: setupSliderCursor(); return true;
   }
 
 not_used:;

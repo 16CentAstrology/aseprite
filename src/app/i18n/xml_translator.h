@@ -1,4 +1,5 @@
 // Aseprite
+// Copyright (C) 2024  Igara Studio S.A.
 // Copyright (C) 2017  David Capello
 //
 // This program is distributed under the terms of
@@ -10,21 +11,22 @@
 
 #include <string>
 
-class TiXmlElement;
+namespace tinyxml2 {
+class XMLElement;
+}
 
 namespace app {
 
-  class XmlTranslator {
-  public:
-    std::string operator()(const TiXmlElement* elem,
-                           const char* attrName);
+class XmlTranslator {
+public:
+  std::string operator()(const tinyxml2::XMLElement* elem, const char* attrName);
 
-    void clearStringIdPrefix();
-    void setStringIdPrefix(const char* prefix);
+  void clearStringIdPrefix();
+  void setStringIdPrefix(const char* prefix);
 
-  private:
-    std::string m_stringIdPrefix;
-  };
+private:
+  std::string m_stringIdPrefix;
+};
 
 } // namespace app
 

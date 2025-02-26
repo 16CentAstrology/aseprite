@@ -1,4 +1,4 @@
--- Copyright (C) 2019-2022  Igara Studio S.A.
+-- Copyright (C) 2019-2023  Igara Studio S.A.
 -- Copyright (C) 2018  David Capello
 --
 -- This file is released under the terms of the MIT license.
@@ -21,8 +21,8 @@ do
   a:resize(6, 8)
   assert(a.width == 6)
   assert(a.height == 8)
-  assert(a.cels[1].image.width == 32 * 6 / 4) -- Check that the image was resized (not only the canvas)
-  assert(a.cels[1].image.height == 64 * 8 / 5)
+  assert(a.cels[1].image.width == math.floor(32 * 6 / 4)) -- Check that the image was resized (not only the canvas)
+  assert(a.cels[1].image.height == math.floor(64 * 8 / 5))
   a:crop{x=-1, y=-1, width=20, height=30}
   assert(a.width == 20)
   assert(a.height == 30)
@@ -205,4 +205,26 @@ do
   local b = Sprite(1, 1)
   assert(a == a)
   assert(a ~= b) -- Compares IDs, not sprite size
+end
+
+-- Tile management plugin
+
+do
+  local fn = "_test_sprite_tileManagementPlugin.aseprite"
+  local a = Sprite(1, 1)
+  assert(a.tileManagementPlugin == nil)
+  a.tileManagementPlugin = "test"
+  app.undo()
+  assert(a.tileManagementPlugin == nil)
+  app.redo()
+  assert(a.tileManagementPlugin == "test")
+  a:saveAs(fn)
+
+  b = app.open(fn)
+  assert(b.tileManagementPlugin == "test")
+  b.tileManagementPlugin = nil
+  b:saveAs(fn)
+
+  c = app.open(fn)
+  assert(c.tileManagementPlugin == nil)
 end

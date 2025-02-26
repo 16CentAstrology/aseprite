@@ -1,25 +1,26 @@
 // Aseprite
-// Copyright (C) 2018-2020  Igara Studio S.A.
+// Copyright (C) 2018-2023  Igara Studio S.A.
 // Copyright (C) 2001-2018  David Capello
 //
 // This program is distributed under the terms of
 // the End-User License Agreement for Aseprite.
 
 // Uncomment if you want to test the backup process each 5 seconds.
-//#define TEST_BACKUPS_WITH_A_SHORT_PERIOD
+// #define TEST_BACKUPS_WITH_A_SHORT_PERIOD
 
 // Uncomment if you want to check that backups are correctly saved
 // after being saved.
-//#define TEST_BACKUP_INTEGRITY
+// #define TEST_BACKUP_INTEGRITY
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "app/crash/backup_observer.h"
 
 #include "app/app.h"
 #include "app/context.h"
+#include "app/crash/log.h"
 #include "app/crash/recovery_config.h"
 #include "app/crash/session.h"
 #include "app/doc.h"
@@ -28,41 +29,40 @@
 #include "app/pref/preferences.h"
 #include "base/chrono.h"
 #include "base/remove_from_container.h"
+#include "base/thread.h"
+#include "ui/app_state.h"
 #include "ui/system.h"
 
-namespace app {
-namespace crash {
+namespace app { namespace crash {
 
 namespace {
 
 class SwitchBackupIcon {
 public:
-  SwitchBackupIcon() {
-    ui::execute_from_ui_thread(
-      []{
-        if (App* app = App::instance())
-          app->showBackupNotification(true);
-      });
+  SwitchBackupIcon()
+  {
+    ui::execute_from_ui_thread([] {
+      if (App* app = App::instance())
+        app->showBackupNotification(true);
+    });
   }
-  ~SwitchBackupIcon() {
-    ui::execute_from_ui_thread(
-      []{
-        if (App* app = App::instance())
-          app->showBackupNotification(false);
-      });
+  ~SwitchBackupIcon()
+  {
+    ui::execute_from_ui_thread([] {
+      if (App* app = App::instance())
+        app->showBackupNotification(false);
+    });
   }
 };
 
-}
+} // namespace
 
-BackupObserver::BackupObserver(RecoveryConfig* config,
-                               Session* session,
-                               Context* ctx)
+BackupObserver::BackupObserver(RecoveryConfig* config, Session* session, Context* ctx)
   : m_config(config)
   , m_session(session)
   , m_ctx(ctx)
   , m_done(false)
-  , m_thread([this]{ backgroundThread(); })
+  , m_thread([this] { backgroundThread(); })
 {
   m_ctx->add_observer(this);
   m_ctx->documents().add_observer(this);
@@ -83,7 +83,7 @@ void BackupObserver::stop()
 
 void BackupObserver::onAddDocument(Doc* document)
 {
-  TRACE("RECO: Observe document %p\n", document);
+  RECO_TRACE("RECO: Observe document %p\n", document);
 
   std::unique_lock<std::mutex> lock(m_mutex);
   m_documents.push_back(document);
@@ -91,7 +91,7 @@ void BackupObserver::onAddDocument(Doc* document)
 
 void BackupObserver::onRemoveDocument(Doc* doc)
 {
-  TRACE("RECO: Remove document %p\n", doc);
+  RECO_TRACE("RECO: Remove document %p\n", doc);
   {
     std::unique_lock<std::mutex> lock(m_mutex);
     base::remove_from_container(m_documents, doc);
@@ -103,18 +103,24 @@ void BackupObserver::onRemoveDocument(Doc* doc)
       // If the backup is disabled, we don't need it (e.g. when the
       // document is destroyed from a script with Sprite:close(), the
       // backup is disabled)
-      !doc->inhibitBackup()) {
+      !doc->inhibitBackup() &&
+      // Don't add the document to closed docs list if we're closing
+      // the app by an exception. Without this
+      // BackupObserver::backgroundThread() could crash using a
+      // document that was already destroyed (because we're unwinding
+      // the stack and destroying all objects by an exception).
+      ui::get_app_state() != ui::AppState::kClosingWithException) {
     // If m_config->keepEditedSpriteDataFor == 0 we add the document
     // in m_closedDocs list anyway so we call markAsBackedUp(), and
     // then it's deleted from ClosedDocs::backgroundThread()
 
-    TRACE("RECO: Adding to CLOSEDOC %p\n", doc);
+    RECO_TRACE("RECO: Adding to CLOSEDOC %p\n", doc);
 
     std::unique_lock<std::mutex> lock(m_mutex);
     m_closedDocs.push_back(doc);
   }
   else {
-    TRACE("RECO: Removing doc %p from session\n", doc);
+    RECO_TRACE("RECO: Removing doc %p from session\n", doc);
     m_session->removeDocument(doc);
   }
 }
@@ -122,8 +128,9 @@ void BackupObserver::onRemoveDocument(Doc* doc)
 void BackupObserver::backgroundThread()
 {
   std::unique_lock<std::mutex> lock(m_mutex);
+  base::this_thread::set_name("backup");
 
-  int normalPeriod = int(60.0*m_config->dataRecoveryPeriod);
+  int normalPeriod = int(60.0 * m_config->dataRecoveryPeriod);
   int lockedPeriod = 5;
 #ifdef TEST_BACKUPS_WITH_A_SHORT_PERIOD
   normalPeriod = 5;
@@ -135,8 +142,8 @@ void BackupObserver::backgroundThread()
   while (!m_done) {
     m_wakeup.wait_for(lock, std::chrono::seconds(waitFor));
 
-    TRACE("RECO: Start backup process for %d documents\n",
-          m_documents.size() + m_closedDocs.size());
+    RECO_TRACE("RECO: Start backup process for %d documents\n",
+               m_documents.size() + m_closedDocs.size());
 
     SwitchBackupIcon icon;
     base::Chrono chrono;
@@ -148,13 +155,13 @@ void BackupObserver::backgroundThread()
     }
 
     if (!m_closedDocs.empty()) {
-      for (auto it=m_closedDocs.begin(); it != m_closedDocs.end(); ) {
+      for (auto it = m_closedDocs.begin(); it != m_closedDocs.end();) {
         Doc* doc = *it;
 
-        TRACE("RECO: Save backup data for %p...\n", doc);
+        RECO_TRACE("RECO: Save backup data for %p...\n", doc);
 
         if (saveDocData(doc)) {
-          TRACE("RECO: Doc %p is fully backed up\n", doc);
+          RECO_TRACE("RECO: Doc %p is fully backed up\n", doc);
 
           it = m_closedDocs.erase(it);
           doc->markAsBackedUp();
@@ -166,9 +173,9 @@ void BackupObserver::backgroundThread()
       }
     }
 
-    waitFor = (somethingLocked ? lockedPeriod: normalPeriod);
+    waitFor = (somethingLocked ? lockedPeriod : normalPeriod);
 
-    TRACE("RECO: Backup process done (%.16g)\n", chrono.elapsed());
+    RECO_TRACE("RECO: Backup process done (%.16g)\n", chrono.elapsed());
   }
 }
 
@@ -180,49 +187,44 @@ bool BackupObserver::saveDocData(Doc* doc)
       return true;
 
     if (doc->inhibitBackup()) {
-      TRACE("RECO: Document '%d' backup is temporarily inhibited\n", doc->id());
+      RECO_TRACE("RECO: Document '%d' backup is temporarily inhibited\n", doc->id());
     }
     else if (!m_session->saveDocumentChanges(doc)) {
-      TRACE("RECO: Document '%d' backup was canceled by UI\n", doc->id());
+      RECO_TRACE("RECO: Document '%d' backup was canceled by UI\n", doc->id());
     }
     else {
 #ifdef TEST_BACKUP_INTEGRITY
       DocReader reader(doc, 500);
-      std::unique_ptr<Doc> copy(
-        m_session->restoreBackupDocById(doc->id(), nullptr));
+      std::unique_ptr<Doc> copy(m_session->restoreBackupDocById(doc->id(), nullptr));
       DocDiff diff = compare_docs(doc, copy.get());
       if (diff.anything) {
-        TRACEARGS("RECO: Differences:",
-                  diff.canvas ? "canvas": "",
-                  diff.totalFrames ? "totalFrames": "",
-                  diff.frameDuration ? "frameDuration": "",
-                  diff.tags ? "tags": "",
-                  diff.palettes ? "palettes": "",
-                  diff.tilesets ? "tilesets": "",
-                  diff.layers ? "layers": "",
-                  diff.cels ? "cels": "",
-                  diff.images ? "images": "",
-                  diff.colorProfiles ? "colorProfiles": "",
-                  diff.gridBounds ? "gridBounds": "");
+        RECO_TRACE("RECO: Differences: %s %s %s %s %s %s %s %s %s %s %s\n",
+                   diff.canvas ? "canvas" : "",
+                   diff.totalFrames ? "totalFrames" : "",
+                   diff.frameDuration ? "frameDuration" : "",
+                   diff.tags ? "tags" : "",
+                   diff.palettes ? "palettes" : "",
+                   diff.tilesets ? "tilesets" : "",
+                   diff.layers ? "layers" : "",
+                   diff.cels ? "cels" : "",
+                   diff.images ? "images" : "",
+                   diff.colorProfiles ? "colorProfiles" : "",
+                   diff.gridBounds ? "gridBounds" : "");
 
         Doc* copyDoc = copy.release();
-        ui::execute_from_ui_thread(
-          [this, copyDoc] {
-            m_ctx->documents().add(copyDoc);
-          });
+        ui::execute_from_ui_thread([this, copyDoc] { m_ctx->documents().add(copyDoc); });
       }
       else {
-        TRACE("RECO: No differences\n");
+        RECO_TRACE("RECO: No differences\n");
       }
 #endif
       return true;
     }
   }
   catch (const std::exception&) {
-    TRACE("RECO: Document '%d' is locked\n", doc->id());
+    RECO_TRACE("RECO: Document '%d' is locked\n", doc->id());
   }
   return false;
 }
 
-} // namespace crash
-} // namespace app
+}} // namespace app::crash
